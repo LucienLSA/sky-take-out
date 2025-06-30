@@ -6,6 +6,11 @@ type EmployeeLogin struct {
 	Password string `json:"password"  binding:"required"`
 }
 
+// 员工登出 假设登出时前端传入username
+type EmployeeLogout struct {
+	UserName string `json:"username" binding:"required"`
+}
+
 // 修改密码
 type EmployeeEditPassword struct {
 	EmpId       uint64 `json:"empId"`

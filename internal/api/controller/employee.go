@@ -30,13 +30,13 @@ func (ec *EmployeeController) AddEmployee(ctx *gin.Context) {
 	var err error
 	err = ctx.Bind(&request)
 	if err != nil {
-		global.Log.Error(ctx, "AddEmployee Error: err=%s", err.Error())
+		global.Log.Error(ctx, "AddEmployee Error: err=%s\n", err.Error())
 		retcode.Fatal(ctx, err, "")
 		return
 	}
 	err = ec.service.CreateEmployee(ctx, request)
 	if err != nil {
-		global.Log.Error(ctx, "AddEmployee  Error: err=%s", err.Error())
+		global.Log.Error(ctx, "AddEmployee  Error: err=%s\n", err.Error())
 		retcode.Fatal(ctx, err, "")
 		return
 	}
@@ -49,13 +49,13 @@ func (ec *EmployeeController) Login(ctx *gin.Context) {
 	employeeLogin := request.EmployeeLogin{}
 	err := ctx.Bind(&employeeLogin)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeController login 解析失败")
+		global.Log.Error(ctx, "EmployeeController login Error:err=%s\n", err.Error())
 		retcode.Fatal(ctx, err, "")
 		return
 	}
 	resp, err := ec.service.Login(ctx, employeeLogin)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeController login Error: err=%s", err.Error())
+		global.Log.Error(ctx, "EmployeeController login Error: err=%s\n", err.Error())
 		retcode.Fatal(ctx, err, "")
 		return
 	}
@@ -64,10 +64,16 @@ func (ec *EmployeeController) Login(ctx *gin.Context) {
 
 // Logout 员工退出
 func (ec *EmployeeController) Logout(ctx *gin.Context) {
-	var err error
-	err = ec.service.Logout(ctx)
+	employeeLogout := request.EmployeeLogout{}
+	err := ctx.Bind(&employeeLogout)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeController login Error: err=%s", err.Error())
+		global.Log.Error(ctx, "EmployeeController Logout Error:err=%s\n", err.Error())
+		retcode.Fatal(ctx, err, "")
+		return
+	}
+	err = ec.service.Logout(ctx, employeeLogout)
+	if err != nil {
+		global.Log.Error(ctx, "EmployeeController Logout Error: err=%s\n", err.Error())
 		retcode.Fatal(ctx, err, "")
 		return
 	}

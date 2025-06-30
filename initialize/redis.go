@@ -1,10 +1,11 @@
 package initialize
 
 import (
+	"context"
 	"fmt"
 	"skytakeout/global"
 
-	"github.com/go-redis/redis"
+	"github.com/redis/go-redis/v9"
 )
 
 func InitRedis() *redis.Client {
@@ -14,7 +15,7 @@ func InitRedis() *redis.Client {
 		Password: redisOpt.Password, // no password set
 		DB:       redisOpt.DataBase, // use default DB
 	})
-	ping := client.Ping()
+	ping := client.Ping(context.Background())
 	err := ping.Err()
 	if err != nil {
 		panic(err)

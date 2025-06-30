@@ -4,13 +4,13 @@ import (
 	"skytakeout/config"
 	"skytakeout/logger"
 
-	"github.com/go-redis/redis"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 var (
-	Config *config.AllConfig // 全局Config
+	Config *config.AllConfig
 	Log    logger.ILog
 	DB     *gorm.DB
-	Redis  *redis.Client
+	Rdb    *redis.Client
 )

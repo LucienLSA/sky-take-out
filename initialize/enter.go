@@ -17,7 +17,7 @@ func GlobalInit() *gin.Engine {
 	// Gorm初始化
 	global.DB = InitDatabase(global.Config.DataSource.Dsn())
 	// Redis初始化
-	global.Redis = InitRedis()
+	global.Rdb = InitRedis()
 	//Router初始化
 	router := routerInit()
 	return router

@@ -11,13 +11,16 @@ import (
 	"skytakeout/global"
 	"skytakeout/internal/api/request"
 	"skytakeout/internal/api/response"
+	"skytakeout/internal/cache"
 	"skytakeout/internal/dao"
 	"skytakeout/internal/model"
+
+	"github.com/gin-gonic/gin"
 )
 
 type IEmployeeService interface {
 	Login(context.Context, request.EmployeeLogin) (*response.EmployeeLogin, error)
-	Logout(ctx context.Context) error
+	Logout(context.Context, request.EmployeeLogout) error
 	EditPassword(context.Context, request.EmployeeEditPassword) error
 	CreateEmployee(ctx context.Context, employee request.EmployeeDTO) error
 	PageQuery(ctx context.Context, dto request.EmployeePageQueryDTO) (*common.PageResult, error)
@@ -58,7 +61,7 @@ func (ei *EmployeeImpl) CreateEmployee(ctx context.Context, employeeDTO request.
 	// 新增用户
 	err = ei.repo.Insert(ctx, entity)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeImpl.CreateEmployee failed, err: %v", err)
+		global.Log.Error(ctx, "repo.Insert failed, err: %v", err)
 		return err
 	}
 	return nil
@@ -84,14 +87,20 @@ func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.Employe
 	if employee.Status == enum.DISABLE {
 		return nil, retcode.NewError(e.ErrorAccountLOCKED, e.GetMsg(e.ErrorAccountLOCKED))
 	}
-	// 生成Token
+	// 4. 生成token
 	jwtConfig := global.Config.Jwt.Admin
-	token, err := utils.GenerateToken(employee.Id, jwtConfig.Name, jwtConfig.Secret)
+	token, err := utils.GenerateToken(employee.Id, employeeLogin.UserName, jwtConfig.Secret)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeImpl.Login failed, err: %v", err)
+		global.Log.Error(ctx, "utils.GenerateToken failed, err: %v", err)
 		return nil, err
 	}
-	// 4.构造返回数据
+	// 5. token存入redis
+	err = cache.StoreUserIdToken(ctx, token, employeeLogin.UserName)
+	if err != nil {
+		global.Log.Error(ctx, "cache.StoreUserIdToken, err: %v", err)
+		return nil, err
+	}
+	// 6.构造返回数据
 	resp := response.EmployeeLogin{
 		Id:       employee.Id,
 		Name:     employee.Name,
@@ -101,18 +110,34 @@ func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.Employe
 	return &resp, nil
 }
 
-func (ei *EmployeeImpl) Logout(ctx context.Context) error {
-	// TODO 后续扩展为单点登录模式。 1.获取上下文中当前用户
-	// 2.如果是单点登录的话执行推出操作
+func (ei *EmployeeImpl) Logout(ctx context.Context, employeeLogout request.EmployeeLogout) error {
+	// TODO 后续扩展为单点登录模式。
+	// 1.获取上下文中当前用户
+	loginUser, exists := ctx.(*gin.Context).Get(enum.CurrentName)
+	if !exists {
+		global.Log.Error(ctx, "ctx.(*gin.Context).Get failed")
+		return retcode.NewError(e.ErrorUserNotLogin, "user not login")
+	}
+	// 2.如果是单点登录的话执行退出操作
+	token := ctx.(*gin.Context).Request.Header.Get(global.Config.Jwt.Admin.Name)
+	if token != "" {
+		err := cache.DeleteUserIdToken(ctx, loginUser.(string))
+		if err != nil {
+			global.Log.Error(ctx, "cache.DeleteUserIdToken, err: %v", err)
+			return err
+		}
+	}
+	global.Log.Info(ctx, "token已经清除,登录状态失效")
 	return nil
 }
 
+// 设置用户状态
 func (ei *EmployeeImpl) SetStatus(ctx context.Context, id uint64, status int) error {
-	// 设置用户状态,构造实体
+	// 构造实体
 	entity := model.Employee{Id: id, Status: status}
 	err := ei.repo.UpdateStatus(ctx, entity)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeImpl.SetStatus failed, err: %v", err)
+		global.Log.Error(ctx, "repo.UpdateStatus failed, err: %v", err)
 		return err
 	}
 	return nil
@@ -123,7 +148,7 @@ func (ei *EmployeeImpl) EditPassword(ctx context.Context, employeeEdit request.E
 	// 1.获取员工信息
 	employee, err := ei.repo.GetById(ctx, employeeEdit.EmpId)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeImpl.EditPassword failed, err: %v", err)
+		global.Log.Error(ctx, "repo.GetById failed, err: %v", err)
 		return err
 	}
 	// 校验用户老密码
@@ -150,7 +175,7 @@ func (ei *EmployeeImpl) EditPassword(ctx context.Context, employeeEdit request.E
 		Password: newHashPassword,
 	})
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeImpl.EditPassword failed, err: %v", err)
+		global.Log.Error(ctx, "repo.Update failed, err: %v", err)
 		return err
 	}
 	return nil
@@ -168,7 +193,7 @@ func (ei *EmployeeImpl) UpdateEmployee(ctx context.Context, dto request.Employee
 		IdNumber: dto.IdNumber,
 	})
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeImpl.UpdateEmployee failed, err: %v", err)
+		global.Log.Error(ctx, "repo.Update failed, err: %v", err)
 		return err
 	}
 	return nil
@@ -179,7 +204,7 @@ func (ei *EmployeeImpl) PageQuery(ctx context.Context, dto request.EmployeePageQ
 	// 分页查询
 	pageResult, err := ei.repo.PageQuery(ctx, dto)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeImpl.PageQuery failed, err: %v", err)
+		global.Log.Error(ctx, "repo.PageQuery failed, err: %v", err)
 		return nil, err
 	}
 	// 屏蔽敏感信息
@@ -200,7 +225,7 @@ func (ei *EmployeeImpl) PageQuery(ctx context.Context, dto request.EmployeePageQ
 func (ei *EmployeeImpl) GetById(ctx context.Context, id uint64) (*model.Employee, error) {
 	employee, err := ei.repo.GetById(ctx, id)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeImpl.GetById failed, err: %v", err)
+		global.Log.Error(ctx, "repo.GetById(, err: %v", err)
 		return nil, err
 	}
 	employee.Password = "***"

@@ -17,7 +17,9 @@ type EmployeeDao struct {
 }
 
 func NewEmployeeDao(db *gorm.DB) *EmployeeDao {
-	return &EmployeeDao{db: db}
+	return &EmployeeDao{
+		db: db,
+	}
 }
 
 // 根据员工名获取员工
