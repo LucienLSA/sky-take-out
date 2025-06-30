@@ -15,3 +15,7 @@ var (
 	Rdb    *redis.Client
 	ZapLog *otelzap.Logger
 )
+
+var (
+	ServiceName = Config.Jaeger.ServiceName
+)

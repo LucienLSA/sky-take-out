@@ -14,10 +14,10 @@ import (
 	"skytakeout/internal/cache"
 	"skytakeout/internal/dao"
 	"skytakeout/internal/model"
-
 	"skytakeout/logger"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 )
 
@@ -41,6 +41,9 @@ func NewEmployeeService(repo *dao.EmployeeDao) IEmployeeService {
 
 // 新增员工
 func (ei *EmployeeImpl) CreateEmployee(ctx context.Context, employeeDTO request.EmployeeDTO) error {
+	tracer := otel.Tracer(global.ServiceName)
+	ctx2, span := tracer.Start(ctx, "CreateEmployee")
+	defer span.End()
 	var err error
 	// 1.新增员工,构建员工基础信息
 	entity := model.Employee{
@@ -58,13 +61,13 @@ func (ei *EmployeeImpl) CreateEmployee(ctx context.Context, employeeDTO request.
 	entity.Password, err = utils.SetPassword("123456")
 	fmt.Println(entity.Password)
 	if err != nil {
-		logger.Logger(ctx).Error("utils.SetPassword failed", zap.Error(err))
+		logger.Logger(ctx2).Error("utils.SetPassword failed", zap.Error(err))
 		return err
 	}
 	// 新增用户
-	err = ei.repo.Insert(ctx, entity)
+	err = ei.repo.Insert(ctx2, entity)
 	if err != nil {
-		logger.Logger(ctx).Error("repo.Insert failed", zap.Error(err))
+		logger.Logger(ctx2).Error("repo.Insert failed", zap.Error(err))
 		return err
 	}
 	return nil
@@ -72,9 +75,13 @@ func (ei *EmployeeImpl) CreateEmployee(ctx context.Context, employeeDTO request.
 
 // 登录业务
 func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.EmployeeLogin) (*response.EmployeeLogin, error) {
+	tracer := otel.Tracer(global.ServiceName)
+	ctx2, span := tracer.Start(ctx, "Login")
+	defer span.End()
 	// 1.查询用户是否存在
-	employee, err := ei.repo.GetByUserName(ctx, employeeLogin.UserName)
+	employee, err := ei.repo.GetByUserName(ctx2, employeeLogin.UserName)
 	if err != nil || employee == nil {
+		logger.Logger(ctx2).Error("repo.GetByUserName failed", zap.Error(err))
 		return nil, retcode.NewError(e.ErrorAccountNotFound, e.GetMsg(e.ErrorAccountNotFound))
 	}
 	// 2.校验密码
@@ -84,23 +91,25 @@ func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.Employe
 	// 	return nil, retcode.NewError(e.ErrorPasswordError, e.GetMsg(e.ErrorPasswordError))
 	// }
 	if err != nil {
+		logger.Logger(ctx2).Error("utils.CheckPassword failed", zap.Error(err))
 		return nil, retcode.NewError(e.ErrorPasswordError, e.GetMsg(e.ErrorPasswordError))
 	}
 	// 3.校验状态
 	if employee.Status == enum.DISABLE {
+		logger.Logger(ctx2).Error("Status.DISABLE failed", zap.Error(err))
 		return nil, retcode.NewError(e.ErrorAccountLOCKED, e.GetMsg(e.ErrorAccountLOCKED))
 	}
 	// 4. 生成token
 	jwtConfig := global.Config.Jwt.Admin
 	token, err := utils.GenerateToken(employee.Id, employeeLogin.UserName, jwtConfig.Secret)
 	if err != nil {
-		logger.Logger(ctx).Error("utils.GenerateToken failed", zap.Error(err))
+		logger.Logger(ctx2).Error("utils.GenerateToken failed", zap.Error(err))
 		return nil, err
 	}
 	// 5. token存入redis
-	err = cache.StoreUserIdToken(ctx, token, employeeLogin.UserName)
+	err = cache.StoreUserIdToken(ctx2, token, employeeLogin.UserName)
 	if err != nil {
-		logger.Logger(ctx).Error("cache.StoreUserIdToken failed", zap.Error(err))
+		logger.Logger(ctx2).Error("cache.StoreUserIdToken failed", zap.Error(err))
 		return nil, err
 	}
 	// 6.构造返回数据
@@ -115,32 +124,37 @@ func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.Employe
 
 func (ei *EmployeeImpl) Logout(ctx context.Context, employeeLogout request.EmployeeLogout) error {
 	// TODO 后续扩展为单点登录模式。
+	tracer := otel.Tracer(global.ServiceName)
+	ctx2, span := tracer.Start(ctx, "Logout")
+	defer span.End()
 	// 1.获取上下文中当前用户
-	loginUser, exists := ctx.(*gin.Context).Get(enum.CurrentName)
+	loginUser, exists := ctx2.(*gin.Context).Get(enum.CurrentName)
 	if !exists {
-		logger.Logger(ctx).Error("ctx.(*gin.Context).Get failed")
+		logger.Logger(ctx2).Error("ctx.(*gin.Context).Get failed")
 		return retcode.NewError(e.ErrorUserNotLogin, "user not login")
 	}
 	// 2.如果是单点登录的话执行退出操作
-	token := ctx.(*gin.Context).Request.Header.Get(global.Config.Jwt.Admin.Name)
+	token := ctx2.(*gin.Context).Request.Header.Get(global.Config.Jwt.Admin.Name)
 	if token != "" {
-		err := cache.DeleteUserIdToken(ctx, loginUser.(string))
+		err := cache.DeleteUserIdToken(ctx2, loginUser.(string))
 		if err != nil {
-			logger.Logger(ctx).Error("cache.DeleteUserIdToken failed", zap.Error(err))
+			logger.Logger(ctx2).Error("cache.DeleteUserIdToken failed", zap.Error(err))
 			return err
 		}
 	}
-	logger.Logger(ctx).Info("token已经清除,登录状态失效")
+	logger.Logger(ctx2).Info("token已经清除,登录状态失效")
 	return nil
 }
 
 // 设置用户状态
 func (ei *EmployeeImpl) SetStatus(ctx context.Context, id uint64, status int) error {
-	// 构造实体
+	tracer := otel.Tracer(global.ServiceName)
+	ctx2, span := tracer.Start(ctx, "SetStatus")
+	defer span.End()
 	entity := model.Employee{Id: id, Status: status}
-	err := ei.repo.UpdateStatus(ctx, entity)
+	err := ei.repo.UpdateStatus(ctx2, entity)
 	if err != nil {
-		logger.Logger(ctx).Error("repo.UpdateStatus failed", zap.Error(err))
+		logger.Logger(ctx2).Error("repo.UpdateStatus failed", zap.Error(err))
 		return err
 	}
 	return nil
@@ -148,14 +162,18 @@ func (ei *EmployeeImpl) SetStatus(ctx context.Context, id uint64, status int) er
 
 // 修改密码
 func (ei *EmployeeImpl) EditPassword(ctx context.Context, employeeEdit request.EmployeeEditPassword) error {
+	tracer := otel.Tracer(global.ServiceName)
+	ctx2, span := tracer.Start(ctx, "SetStatus")
+	defer span.End()
 	// 1.获取员工信息
-	employee, err := ei.repo.GetById(ctx, employeeEdit.EmpId)
+	employee, err := ei.repo.GetById(ctx2, employeeEdit.EmpId)
 	if err != nil {
-		logger.Logger(ctx).Error("repo.GetById failed", zap.Error(err))
+		logger.Logger(ctx2).Error("repo.GetById failed", zap.Error(err))
 		return err
 	}
 	// 校验用户老密码
 	if employee == nil {
+		logger.Logger(ctx2).Error("repo.GetById failed", zap.Error(err))
 		return retcode.NewError(e.ErrorAccountNotFound, e.GetMsg(e.ErrorAccountNotFound))
 	}
 	// oldHashPassword := utils.MD5V(employeeEdit.OldPassword, "", 0)
@@ -164,21 +182,22 @@ func (ei *EmployeeImpl) EditPassword(ctx context.Context, employeeEdit request.E
 	// }
 	err = utils.CheckPassword(employee.Password, employeeEdit.OldPassword)
 	if err != nil {
+		logger.Logger(ctx2).Error("utils.CheckPassword failed", zap.Error(err))
 		return retcode.NewError(e.ErrorPasswordError, e.GetMsg(e.ErrorPasswordError))
 	}
 	// 修改员工密码
 	// newHashPassword := utils.MD5V(employeeEdit.NewPassword, "", 0) // 使用新密码生成哈希值
 	newHashPassword, err := utils.SetPassword(employeeEdit.NewPassword)
 	if err != nil {
-		logger.Logger(ctx).Error("utils.SetPassword failed", zap.Error(err))
+		logger.Logger(ctx2).Error("utils.SetPassword failed", zap.Error(err))
 		return err
 	}
-	err = ei.repo.Update(ctx, model.Employee{
+	err = ei.repo.Update(ctx2, model.Employee{
 		Id:       employeeEdit.EmpId,
 		Password: newHashPassword,
 	})
 	if err != nil {
-		logger.Logger(ctx).Error("repo.Update failed", zap.Error(err))
+		logger.Logger(ctx2).Error("repo.Update failed", zap.Error(err))
 		return err
 	}
 	return nil
@@ -186,8 +205,11 @@ func (ei *EmployeeImpl) EditPassword(ctx context.Context, employeeEdit request.E
 
 // 更新员工业务
 func (ei *EmployeeImpl) UpdateEmployee(ctx context.Context, dto request.EmployeeDTO) error {
+	tracer := otel.Tracer(global.ServiceName)
+	ctx2, span := tracer.Start(ctx, "UpdateEmployee")
+	defer span.End()
 	// 构建model实体进行更新
-	err := ei.repo.Update(ctx, model.Employee{
+	err := ei.repo.Update(ctx2, model.Employee{
 		Id:       dto.Id,
 		Username: dto.UserName,
 		Name:     dto.Name,
@@ -196,7 +218,7 @@ func (ei *EmployeeImpl) UpdateEmployee(ctx context.Context, dto request.Employee
 		IdNumber: dto.IdNumber,
 	})
 	if err != nil {
-		logger.Logger(ctx).Error("repo.Update failed", zap.Error(err))
+		logger.Logger(ctx2).Error("repo.Update failed", zap.Error(err))
 		return err
 	}
 	return nil
@@ -204,10 +226,13 @@ func (ei *EmployeeImpl) UpdateEmployee(ctx context.Context, dto request.Employee
 
 // 员工分页查询业务
 func (ei *EmployeeImpl) PageQuery(ctx context.Context, dto request.EmployeePageQueryDTO) (*common.PageResult, error) {
+	tracer := otel.Tracer(global.ServiceName)
+	ctx2, span := tracer.Start(ctx, "PageQuery")
+	defer span.End()
 	// 分页查询
-	pageResult, err := ei.repo.PageQuery(ctx, dto)
+	pageResult, err := ei.repo.PageQuery(ctx2, dto)
 	if err != nil {
-		logger.Logger(ctx).Error("repo.PageQuery failed", zap.Error(err))
+		logger.Logger(ctx2).Error("repo.PageQuery failed", zap.Error(err))
 		return nil, err
 	}
 	// 屏蔽敏感信息
@@ -226,9 +251,12 @@ func (ei *EmployeeImpl) PageQuery(ctx context.Context, dto request.EmployeePageQ
 
 // 根据id获取员工id
 func (ei *EmployeeImpl) GetById(ctx context.Context, id uint64) (*model.Employee, error) {
-	employee, err := ei.repo.GetById(ctx, id)
+	tracer := otel.Tracer(global.ServiceName)
+	ctx2, span := tracer.Start(ctx, "GetById")
+	defer span.End()
+	employee, err := ei.repo.GetById(ctx2, id)
 	if err != nil {
-		logger.Logger(ctx).Error("repo.GetById failed", zap.Error(err))
+		logger.Logger(ctx2).Error("repo.GetById failed", zap.Error(err))
 		return nil, err
 	}
 	employee.Password = "***"
