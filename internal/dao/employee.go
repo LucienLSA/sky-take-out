@@ -2,9 +2,11 @@ package dao
 
 import (
 	"context"
+	"skytakeout/common"
 	"skytakeout/common/e"
 	"skytakeout/common/retcode"
 	"skytakeout/global"
+	"skytakeout/internal/api/request"
 	"skytakeout/internal/model"
 
 	"gorm.io/gorm"
@@ -69,4 +71,29 @@ func (d *EmployeeDao) Update(ctx context.Context, employee model.Employee) error
 		return retcode.NewError(e.MysqlERR, "Update employee failed")
 	}
 	return nil
+}
+
+func (d *EmployeeDao) PageQuery(ctx context.Context, dto request.EmployeePageQueryDTO) (*common.PageResult, error) {
+	// 分页查询 select count(*) from employee where name = ? limit x,y
+	var result common.PageResult
+	var employeeList []model.Employee
+	var err error
+	// 动态拼接
+	query := d.db.WithContext(ctx).Model(&model.Employee{})
+	if dto.Name != "" {
+		query = query.Where("name LIKE ?", "%"+dto.Name+"%")
+	}
+	// 计算总数
+	if err = query.Count(&result.Total).Error; err != nil {
+		global.Log.Error(ctx, "EmployeeDao.PageQuery Count failed, err: %v", err)
+		return nil, retcode.NewError(e.MysqlERR, "Get employee List failed")
+	}
+	// 分页查询
+	err = query.Scopes(result.Paginate(&dto.Page, &dto.PageSize)).Find(&employeeList).Error
+	if err != nil {
+		global.Log.Error(ctx, "EmployeeDao.PageQuery List failed, err: %v", err)
+		return nil, retcode.NewError(e.MysqlERR, "Get employee List failed")
+	}
+	result.Records = employeeList
+	return &result, nil
 }

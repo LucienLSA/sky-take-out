@@ -111,3 +111,53 @@ func (ec *EmployeeController) EditPassword(ctx *gin.Context) {
 	}
 	retcode.OK(ctx, "")
 }
+
+// UpdateEmployee 编辑员工信息
+func (ec *EmployeeController) UpdateEmployee(ctx *gin.Context) {
+	var employeeDTO request.EmployeeDTO
+	err := ctx.Bind(&employeeDTO)
+	if err != nil {
+		global.Log.Error(ctx, "UpdateEmployee Error: err=%s", err.Error())
+		retcode.Fatal(ctx, err, "")
+		return
+	}
+	// 修改员工信息
+	err = ec.service.UpdateEmployee(ctx.Request.Context(), employeeDTO)
+	if err != nil {
+		global.Log.Error(ctx, "UpdateEmployee Error: err=%s", err.Error())
+		retcode.Fatal(ctx, err, "")
+		return
+	}
+	retcode.OK(ctx, "")
+}
+
+// PageQuery 员工分页查询
+func (ec *EmployeeController) PageQuery(ctx *gin.Context) {
+	var employeePageQueryDTO request.EmployeePageQueryDTO
+	err := ctx.Bind(&employeePageQueryDTO)
+	if err != nil {
+		global.Log.Error(ctx, "AddEmployee  invalid params err=%s", err.Error())
+		retcode.Fatal(ctx, err, "")
+		return
+	}
+	// 进行分页查询
+	pageResult, err := ec.service.PageQuery(ctx, employeePageQueryDTO)
+	if err != nil {
+		global.Log.Error(ctx, "AddEmployee  Error: err=%s", err.Error())
+		retcode.Fatal(ctx, err, "")
+		return
+	}
+	retcode.OK(ctx, pageResult)
+}
+
+// GetById 获取员工信息根据id
+func (ec *EmployeeController) GetById(ctx *gin.Context) {
+	id, _ := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	employee, err := ec.service.GetById(ctx.Request.Context(), id)
+	if err != nil {
+		global.Log.Error(ctx, "EmployeeCtrl GetById Error err=%s", err.Error())
+		retcode.Fatal(ctx, err, "")
+		return
+	}
+	retcode.OK(ctx, employee)
+}

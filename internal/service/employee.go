@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"skytakeout/common"
 	"skytakeout/common/e"
 	"skytakeout/common/enum"
 	"skytakeout/common/retcode"
@@ -19,10 +20,10 @@ type IEmployeeService interface {
 	Logout(ctx context.Context) error
 	EditPassword(context.Context, request.EmployeeEditPassword) error
 	CreateEmployee(ctx context.Context, employee request.EmployeeDTO) error
-	// PageQuery(ctx context.Context, dto request.EmployeePageQueryDTO) (*common.PageResult, error)
+	PageQuery(ctx context.Context, dto request.EmployeePageQueryDTO) (*common.PageResult, error)
 	SetStatus(ctx context.Context, id uint64, status int) error
-	// UpdateEmployee(ctx context.Context, dto request.EmployeeDTO) error
-	// GetById(ctx context.Context, id uint64) (*model.Employee, error)
+	UpdateEmployee(ctx context.Context, dto request.EmployeeDTO) error
+	GetById(ctx context.Context, id uint64) (*model.Employee, error)
 }
 type EmployeeImpl struct {
 	repo *dao.EmployeeDao
@@ -153,4 +154,55 @@ func (ei *EmployeeImpl) EditPassword(ctx context.Context, employeeEdit request.E
 		return err
 	}
 	return nil
+}
+
+// 更新员工业务
+func (ei *EmployeeImpl) UpdateEmployee(ctx context.Context, dto request.EmployeeDTO) error {
+	// 构建model实体进行更新
+	err := ei.repo.Update(ctx, model.Employee{
+		Id:       dto.Id,
+		Username: dto.UserName,
+		Name:     dto.Name,
+		Phone:    dto.Phone,
+		Sex:      dto.Sex,
+		IdNumber: dto.IdNumber,
+	})
+	if err != nil {
+		global.Log.Error(ctx, "EmployeeImpl.UpdateEmployee failed, err: %v", err)
+		return err
+	}
+	return nil
+}
+
+// 员工分页查询业务
+func (ei *EmployeeImpl) PageQuery(ctx context.Context, dto request.EmployeePageQueryDTO) (*common.PageResult, error) {
+	// 分页查询
+	pageResult, err := ei.repo.PageQuery(ctx, dto)
+	if err != nil {
+		global.Log.Error(ctx, "EmployeeImpl.PageQuery failed, err: %v", err)
+		return nil, err
+	}
+	// 屏蔽敏感信息
+	if employees, ok := pageResult.Records.([]model.Employee); ok {
+		// 替换敏感信息
+		for key, _ := range employees {
+			employees[key].Password = "****"
+			employees[key].IdNumber = "****"
+			employees[key].Phone = "****"
+		}
+		// 重新赋值
+		pageResult.Records = employees
+	}
+	return pageResult, nil
+}
+
+// 根据id获取员工id
+func (ei *EmployeeImpl) GetById(ctx context.Context, id uint64) (*model.Employee, error) {
+	employee, err := ei.repo.GetById(ctx, id)
+	if err != nil {
+		global.Log.Error(ctx, "EmployeeImpl.GetById failed, err: %v", err)
+		return nil, err
+	}
+	employee.Password = "***"
+	return employee, err
 }
