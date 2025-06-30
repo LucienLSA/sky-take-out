@@ -46,6 +46,7 @@ type AllConfig struct {
 	Jwt        Jwt        `mapstructure:"jwt"`
 	AliOss     AliOss     `mapstructure:"alioss"`
 	Wechat     Wechat     `mapstructure:"wechat"`
+	Jaeger     Jaeger     `mapstructure:"jaeger"`
 }
 
 type Server struct {
@@ -99,4 +100,9 @@ type AliOss struct {
 type Wechat struct {
 	AppId  string `mapstructure:"appid"`
 	Secret string `mapstructure:"secret"`
+}
+
+type Jaeger struct {
+	ServiceName string `mapstructure:"service_name"`
+	EndPoint    string `mapstructure:"endpoint"`
 }

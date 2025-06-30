@@ -8,7 +8,10 @@ import (
 	"skytakeout/global"
 	"time"
 
+	"skytakeout/logger"
+
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 func StoreUserIdToken(ctx context.Context, token, username string) (err error) {
@@ -17,7 +20,7 @@ func StoreUserIdToken(ctx context.Context, token, username string) (err error) {
 	key := GetRedisKey(KeyTokenSetPrefix)
 	// 存入redis
 	if err = global.Rdb.Set(ctx, key+username, token, duration).Err(); err != nil {
-		global.Log.Error(ctx, "global.Rdb.Set failed, err: %v", err)
+		logger.Logger(ctx).Error("global.Rdb.Set failed", zap.Error(err))
 		return retcode.NewError(e.RedisERR, "rdb.Set failed")
 	}
 	return nil
@@ -29,11 +32,11 @@ func GetJwtToken(ctx context.Context, username string) (token string, err error)
 	token, err = global.Rdb.Get(ctx, key+username).Result()
 	fmt.Println("token:", token)
 	if err == redis.Nil {
-		global.Log.Error(ctx, "global.Rdb.Get failed, err: redis.Nil")
+		logger.Logger(ctx).Error("global.Rdb.Get failed", zap.String("err", "redis.Nil"))
 		return "", retcode.NewError(e.ErrorUserNotLogin, "token is empty")
 	}
 	if err != nil {
-		global.Log.Error(ctx, "global.Rdb.Get failed, err: %v", err)
+		logger.Logger(ctx).Error("global.Rdb.Get failed", zap.Error(err))
 		return "", retcode.NewError(e.RedisERR, "rdb.Get failed")
 	}
 	return token, nil
@@ -48,7 +51,7 @@ func DeleteUserIdToken(ctx context.Context, username string) error {
 	// 直接删除该key todo:设置过期时间为0
 	err := global.Rdb.Del(ctx, key).Err()
 	if err != nil {
-		global.Log.Error(ctx, "global.Rdb.De, err: %v", err)
+		logger.Logger(ctx).Error("global.Rdb.Del failed", zap.Error(err))
 		return retcode.NewError(e.RedisERR, "rdb.Del failed")
 	}
 	return nil

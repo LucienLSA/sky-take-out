@@ -1,17 +1,19 @@
 package initialize
 
 import (
+	"skytakeout/global"
 	"skytakeout/internal/router"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
-func routerInit() *gin.Engine {
+func InitRouter() *gin.Engine {
 	r := gin.Default()
 	allRouter := router.AllRouter
 
 	// 链路追踪日志中间件
-	// r.Use(logger.GinMiddleware(global.Log, "takeout"))
+	r.Use(otelgin.Middleware(global.Config.Jaeger.ServiceName))
 
 	// admin
 	admin := r.Group("/admin")

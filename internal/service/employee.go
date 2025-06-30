@@ -15,7 +15,10 @@ import (
 	"skytakeout/internal/dao"
 	"skytakeout/internal/model"
 
+	"skytakeout/logger"
+
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type IEmployeeService interface {
@@ -55,13 +58,13 @@ func (ei *EmployeeImpl) CreateEmployee(ctx context.Context, employeeDTO request.
 	entity.Password, err = utils.SetPassword("123456")
 	fmt.Println(entity.Password)
 	if err != nil {
-		global.Log.Error(ctx, "utils.SetPassword failed, err: %v", err)
+		logger.Logger(ctx).Error("utils.SetPassword failed", zap.Error(err))
 		return err
 	}
 	// 新增用户
 	err = ei.repo.Insert(ctx, entity)
 	if err != nil {
-		global.Log.Error(ctx, "repo.Insert failed, err: %v", err)
+		logger.Logger(ctx).Error("repo.Insert failed", zap.Error(err))
 		return err
 	}
 	return nil
@@ -91,13 +94,13 @@ func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.Employe
 	jwtConfig := global.Config.Jwt.Admin
 	token, err := utils.GenerateToken(employee.Id, employeeLogin.UserName, jwtConfig.Secret)
 	if err != nil {
-		global.Log.Error(ctx, "utils.GenerateToken failed, err: %v", err)
+		logger.Logger(ctx).Error("utils.GenerateToken failed", zap.Error(err))
 		return nil, err
 	}
 	// 5. token存入redis
 	err = cache.StoreUserIdToken(ctx, token, employeeLogin.UserName)
 	if err != nil {
-		global.Log.Error(ctx, "cache.StoreUserIdToken, err: %v", err)
+		logger.Logger(ctx).Error("cache.StoreUserIdToken failed", zap.Error(err))
 		return nil, err
 	}
 	// 6.构造返回数据
@@ -115,7 +118,7 @@ func (ei *EmployeeImpl) Logout(ctx context.Context, employeeLogout request.Emplo
 	// 1.获取上下文中当前用户
 	loginUser, exists := ctx.(*gin.Context).Get(enum.CurrentName)
 	if !exists {
-		global.Log.Error(ctx, "ctx.(*gin.Context).Get failed")
+		logger.Logger(ctx).Error("ctx.(*gin.Context).Get failed")
 		return retcode.NewError(e.ErrorUserNotLogin, "user not login")
 	}
 	// 2.如果是单点登录的话执行退出操作
@@ -123,11 +126,11 @@ func (ei *EmployeeImpl) Logout(ctx context.Context, employeeLogout request.Emplo
 	if token != "" {
 		err := cache.DeleteUserIdToken(ctx, loginUser.(string))
 		if err != nil {
-			global.Log.Error(ctx, "cache.DeleteUserIdToken, err: %v", err)
+			logger.Logger(ctx).Error("cache.DeleteUserIdToken failed", zap.Error(err))
 			return err
 		}
 	}
-	global.Log.Info(ctx, "token已经清除,登录状态失效")
+	logger.Logger(ctx).Info("token已经清除,登录状态失效")
 	return nil
 }
 
@@ -137,7 +140,7 @@ func (ei *EmployeeImpl) SetStatus(ctx context.Context, id uint64, status int) er
 	entity := model.Employee{Id: id, Status: status}
 	err := ei.repo.UpdateStatus(ctx, entity)
 	if err != nil {
-		global.Log.Error(ctx, "repo.UpdateStatus failed, err: %v", err)
+		logger.Logger(ctx).Error("repo.UpdateStatus failed", zap.Error(err))
 		return err
 	}
 	return nil
@@ -148,7 +151,7 @@ func (ei *EmployeeImpl) EditPassword(ctx context.Context, employeeEdit request.E
 	// 1.获取员工信息
 	employee, err := ei.repo.GetById(ctx, employeeEdit.EmpId)
 	if err != nil {
-		global.Log.Error(ctx, "repo.GetById failed, err: %v", err)
+		logger.Logger(ctx).Error("repo.GetById failed", zap.Error(err))
 		return err
 	}
 	// 校验用户老密码
@@ -167,7 +170,7 @@ func (ei *EmployeeImpl) EditPassword(ctx context.Context, employeeEdit request.E
 	// newHashPassword := utils.MD5V(employeeEdit.NewPassword, "", 0) // 使用新密码生成哈希值
 	newHashPassword, err := utils.SetPassword(employeeEdit.NewPassword)
 	if err != nil {
-		global.Log.Error(ctx, "utils.SetPassword failed, err: %v", err)
+		logger.Logger(ctx).Error("utils.SetPassword failed", zap.Error(err))
 		return err
 	}
 	err = ei.repo.Update(ctx, model.Employee{
@@ -175,7 +178,7 @@ func (ei *EmployeeImpl) EditPassword(ctx context.Context, employeeEdit request.E
 		Password: newHashPassword,
 	})
 	if err != nil {
-		global.Log.Error(ctx, "repo.Update failed, err: %v", err)
+		logger.Logger(ctx).Error("repo.Update failed", zap.Error(err))
 		return err
 	}
 	return nil
@@ -193,7 +196,7 @@ func (ei *EmployeeImpl) UpdateEmployee(ctx context.Context, dto request.Employee
 		IdNumber: dto.IdNumber,
 	})
 	if err != nil {
-		global.Log.Error(ctx, "repo.Update failed, err: %v", err)
+		logger.Logger(ctx).Error("repo.Update failed", zap.Error(err))
 		return err
 	}
 	return nil
@@ -204,7 +207,7 @@ func (ei *EmployeeImpl) PageQuery(ctx context.Context, dto request.EmployeePageQ
 	// 分页查询
 	pageResult, err := ei.repo.PageQuery(ctx, dto)
 	if err != nil {
-		global.Log.Error(ctx, "repo.PageQuery failed, err: %v", err)
+		logger.Logger(ctx).Error("repo.PageQuery failed", zap.Error(err))
 		return nil, err
 	}
 	// 屏蔽敏感信息
@@ -225,7 +228,7 @@ func (ei *EmployeeImpl) PageQuery(ctx context.Context, dto request.EmployeePageQ
 func (ei *EmployeeImpl) GetById(ctx context.Context, id uint64) (*model.Employee, error) {
 	employee, err := ei.repo.GetById(ctx, id)
 	if err != nil {
-		global.Log.Error(ctx, "repo.GetById(, err: %v", err)
+		logger.Logger(ctx).Error("repo.GetById failed", zap.Error(err))
 		return nil, err
 	}
 	employee.Password = "***"

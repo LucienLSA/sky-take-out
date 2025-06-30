@@ -2,10 +2,12 @@ package initialize
 
 import (
 	"errors"
-	"skytakeout/global"
 	"time"
 
+	zaplogger "skytakeout/logger"
+
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -68,8 +70,12 @@ func SlowQueryLog(db *gorm.DB) {
 			duration := now.Sub(start.(time.Time))
 			// 一般认为 200 Ms 为Sql慢查询
 			if duration > time.Millisecond*200 {
-				global.Log.Error(db.Statement.Context, "慢查询", "SQL:", d.Statement.SQL.String())
+				// global.Log.Error(db.Statement.Context, "慢查询", "SQL:", d.Statement.SQL.String())
 				// global.Log.ErrContext(d.Statement.Context, "慢查询", "SQL:", d.Statement.SQL.String())
+				zaplogger.Logger(db.Statement.Context).Error("慢查询",
+					zap.String("sql", d.Statement.SQL.String()),
+					zap.Int64("duration_ms", duration.Milliseconds()),
+				)
 			}
 		}
 	})

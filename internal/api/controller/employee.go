@@ -3,12 +3,15 @@ package controller
 import (
 	"skytakeout/common/enum"
 	"skytakeout/common/retcode"
-	"skytakeout/global"
 	"skytakeout/internal/api/request"
 	"skytakeout/internal/service"
 	"strconv"
 
+	"skytakeout/logger"
+
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel"
+	"go.uber.org/zap"
 )
 
 // 控制器依赖于服务层的抽象，而不是具体实现
@@ -26,17 +29,20 @@ func NewEmployeeController(employeeService service.IEmployeeService) *EmployeeCo
 
 // AddEmployee 新增员工
 func (ec *EmployeeController) AddEmployee(ctx *gin.Context) {
+	tracer := otel.Tracer("sky-take-out")
+	ctx2, span := tracer.Start(ctx, "AddEmployee")
+	defer span.End()
 	var request request.EmployeeDTO
 	var err error
 	err = ctx.Bind(&request)
 	if err != nil {
-		global.Log.Error(ctx, "AddEmployee Error: err=%s\n", err.Error())
+		logger.Logger(ctx2).Error("AddEmployee Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 		return
 	}
-	err = ec.service.CreateEmployee(ctx, request)
+	err = ec.service.CreateEmployee(ctx2, request)
 	if err != nil {
-		global.Log.Error(ctx, "AddEmployee  Error: err=%s\n", err.Error())
+		logger.Logger(ctx2).Error("AddEmployee Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 		return
 	}
@@ -46,16 +52,19 @@ func (ec *EmployeeController) AddEmployee(ctx *gin.Context) {
 
 // Login 员工登录
 func (ec *EmployeeController) Login(ctx *gin.Context) {
+	tracer := otel.Tracer("sky-take-out")
+	ctx2, span := tracer.Start(ctx, "Login")
+	defer span.End()
 	employeeLogin := request.EmployeeLogin{}
 	err := ctx.Bind(&employeeLogin)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeController login Error:err=%s\n", err.Error())
+		logger.Logger(ctx2).Error("EmployeeController login Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 		return
 	}
-	resp, err := ec.service.Login(ctx, employeeLogin)
+	resp, err := ec.service.Login(ctx2, employeeLogin)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeController login Error: err=%s\n", err.Error())
+		logger.Logger(ctx2).Error("EmployeeController login Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 		return
 	}
@@ -64,16 +73,19 @@ func (ec *EmployeeController) Login(ctx *gin.Context) {
 
 // Logout 员工退出
 func (ec *EmployeeController) Logout(ctx *gin.Context) {
+	tracer := otel.Tracer("sky-take-out")
+	ctx2, span := tracer.Start(ctx, "Logout")
+	defer span.End()
 	employeeLogout := request.EmployeeLogout{}
 	err := ctx.Bind(&employeeLogout)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeController Logout Error:err=%s\n", err.Error())
+		logger.Logger(ctx2).Error("EmployeeController Logout Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 		return
 	}
-	err = ec.service.Logout(ctx, employeeLogout)
+	err = ec.service.Logout(ctx2, employeeLogout)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeController Logout Error: err=%s\n", err.Error())
+		logger.Logger(ctx2).Error("EmployeeController Logout Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 		return
 	}
@@ -82,27 +94,33 @@ func (ec *EmployeeController) Logout(ctx *gin.Context) {
 
 // OnOrOff 启用Or禁用员工状态
 func (ec *EmployeeController) OnOrOff(ctx *gin.Context) {
+	tracer := otel.Tracer("sky-take-out")
+	ctx2, span := tracer.Start(ctx, "OnOrOff")
+	defer span.End()
 	id, _ := strconv.ParseUint(ctx.Query("id"), 10, 64)
 	status, _ := strconv.Atoi(ctx.Param("status"))
 	var err error
-	err = ec.service.SetStatus(ctx, id, status)
+	err = ec.service.SetStatus(ctx2, id, status)
 	if err != nil {
-		global.Log.Error(ctx, "OnOrOff Status  Error: err=%s", err.Error())
+		logger.Logger(ctx2).Error("OnOrOff Status Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 		return
 	}
 	// 更新员工状态
-	global.Log.Info("启用Or禁用员工状态：", "id", id, "status", status)
+	logger.Logger(ctx2).Info("启用Or禁用员工状态", zap.Uint64("id", id), zap.Int("status", status))
 	retcode.OK(ctx, "")
 }
 
 // EditPassword 修改密码
 func (ec *EmployeeController) EditPassword(ctx *gin.Context) {
+	tracer := otel.Tracer("sky-take-out")
+	ctx2, span := tracer.Start(ctx, "EditPassword")
+	defer span.End()
 	var reqs request.EmployeeEditPassword
 	var err error
 	err = ctx.Bind(&reqs)
 	if err != nil {
-		global.Log.Error(ctx, "EditPassword Error: err=%s", err.Error())
+		logger.Logger(ctx2).Error("EditPassword Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 		return
 	}
@@ -110,9 +128,9 @@ func (ec *EmployeeController) EditPassword(ctx *gin.Context) {
 	if id, ok := ctx.Get(enum.CurrentId); ok {
 		reqs.EmpId = id.(uint64)
 	}
-	err = ec.service.EditPassword(ctx, reqs)
+	err = ec.service.EditPassword(ctx2, reqs)
 	if err != nil {
-		global.Log.Error(ctx, "EditPassword  Error: err=%s", err.Error())
+		logger.Logger(ctx2).Error("EditPassword Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 	}
 	retcode.OK(ctx, "")
@@ -120,17 +138,20 @@ func (ec *EmployeeController) EditPassword(ctx *gin.Context) {
 
 // UpdateEmployee 编辑员工信息
 func (ec *EmployeeController) UpdateEmployee(ctx *gin.Context) {
+	tracer := otel.Tracer("sky-take-out")
+	ctx2, span := tracer.Start(ctx, "UpdateEmployee")
+	defer span.End()
 	var employeeDTO request.EmployeeDTO
 	err := ctx.Bind(&employeeDTO)
 	if err != nil {
-		global.Log.Error(ctx, "UpdateEmployee Error: err=%s", err.Error())
+		logger.Logger(ctx2).Error("UpdateEmployee Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 		return
 	}
 	// 修改员工信息
-	err = ec.service.UpdateEmployee(ctx.Request.Context(), employeeDTO)
+	err = ec.service.UpdateEmployee(ctx2, employeeDTO)
 	if err != nil {
-		global.Log.Error(ctx, "UpdateEmployee Error: err=%s", err.Error())
+		logger.Logger(ctx2).Error("UpdateEmployee Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 		return
 	}
@@ -139,17 +160,20 @@ func (ec *EmployeeController) UpdateEmployee(ctx *gin.Context) {
 
 // PageQuery 员工分页查询
 func (ec *EmployeeController) PageQuery(ctx *gin.Context) {
+	tracer := otel.Tracer("sky-take-out")
+	ctx2, span := tracer.Start(ctx, "PageQuery")
+	defer span.End()
 	var employeePageQueryDTO request.EmployeePageQueryDTO
 	err := ctx.Bind(&employeePageQueryDTO)
 	if err != nil {
-		global.Log.Error(ctx, "AddEmployee  invalid params err=%s", err.Error())
+		logger.Logger(ctx2).Error("AddEmployee invalid params", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 		return
 	}
 	// 进行分页查询
-	pageResult, err := ec.service.PageQuery(ctx, employeePageQueryDTO)
+	pageResult, err := ec.service.PageQuery(ctx2, employeePageQueryDTO)
 	if err != nil {
-		global.Log.Error(ctx, "AddEmployee  Error: err=%s", err.Error())
+		logger.Logger(ctx2).Error("AddEmployee Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 		return
 	}
@@ -158,10 +182,13 @@ func (ec *EmployeeController) PageQuery(ctx *gin.Context) {
 
 // GetById 获取员工信息根据id
 func (ec *EmployeeController) GetById(ctx *gin.Context) {
+	tracer := otel.Tracer("sky-take-out")
+	ctx2, span := tracer.Start(ctx, "GetById")
+	defer span.End()
 	id, _ := strconv.ParseUint(ctx.Param("id"), 10, 64)
-	employee, err := ec.service.GetById(ctx.Request.Context(), id)
+	employee, err := ec.service.GetById(ctx2, id)
 	if err != nil {
-		global.Log.Error(ctx, "EmployeeCtrl GetById Error err=%s", err.Error())
+		logger.Logger(ctx2).Error("EmployeeCtrl GetById Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")
 		return
 	}
