@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"skytakeout/common/enum"
 	"skytakeout/common/retcode"
 	"skytakeout/global"
 	"skytakeout/internal/api/request"
 	"skytakeout/internal/service"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -68,6 +70,44 @@ func (ec *EmployeeController) Logout(ctx *gin.Context) {
 		global.Log.Error(ctx, "EmployeeController login Error: err=%s", err.Error())
 		retcode.Fatal(ctx, err, "")
 		return
+	}
+	retcode.OK(ctx, "")
+}
+
+// OnOrOff 启用Or禁用员工状态
+func (ec *EmployeeController) OnOrOff(ctx *gin.Context) {
+	id, _ := strconv.ParseUint(ctx.Query("id"), 10, 64)
+	status, _ := strconv.Atoi(ctx.Param("status"))
+	var err error
+	err = ec.service.SetStatus(ctx, id, status)
+	if err != nil {
+		global.Log.Error(ctx, "OnOrOff Status  Error: err=%s", err.Error())
+		retcode.Fatal(ctx, err, "")
+		return
+	}
+	// 更新员工状态
+	global.Log.Info("启用Or禁用员工状态：", "id", id, "status", status)
+	retcode.OK(ctx, "")
+}
+
+// EditPassword 修改密码
+func (ec *EmployeeController) EditPassword(ctx *gin.Context) {
+	var reqs request.EmployeeEditPassword
+	var err error
+	err = ctx.Bind(&reqs)
+	if err != nil {
+		global.Log.Error(ctx, "EditPassword Error: err=%s", err.Error())
+		retcode.Fatal(ctx, err, "")
+		return
+	}
+	// 从上下文获取员工id
+	if id, ok := ctx.Get(enum.CurrentId); ok {
+		reqs.EmpId = id.(uint64)
+	}
+	err = ec.service.EditPassword(ctx, reqs)
+	if err != nil {
+		global.Log.Error(ctx, "EditPassword  Error: err=%s", err.Error())
+		retcode.Fatal(ctx, err, "")
 	}
 	retcode.OK(ctx, "")
 }

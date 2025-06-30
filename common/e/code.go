@@ -3,7 +3,7 @@ package e
 const (
 	SUCCESS                         = 1    //ok
 	ERROR                           = 2    //内部错误
-	UNKNOW_IDENTITY                 = 403  //未知身份
+	UNKNOW_IDENTITY                 = 401  //未知身份
 	MysqlERR                        = 1001 //mysql出错
 	MysqlTransActionERR             = 1002 //mysql事务执行出错
 	RedisERR                        = 1003 //redis出错

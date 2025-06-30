@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"skytakeout/common/e"
 	"skytakeout/common/enum"
 	"skytakeout/common/retcode"
@@ -16,10 +17,10 @@ import (
 type IEmployeeService interface {
 	Login(context.Context, request.EmployeeLogin) (*response.EmployeeLogin, error)
 	Logout(ctx context.Context) error
-	// EditPassword(context.Context, request.EmployeeEditPassword) error
+	EditPassword(context.Context, request.EmployeeEditPassword) error
 	CreateEmployee(ctx context.Context, employee request.EmployeeDTO) error
 	// PageQuery(ctx context.Context, dto request.EmployeePageQueryDTO) (*common.PageResult, error)
-	// SetStatus(ctx context.Context, id uint64, status int) error
+	SetStatus(ctx context.Context, id uint64, status int) error
 	// UpdateEmployee(ctx context.Context, dto request.EmployeeDTO) error
 	// GetById(ctx context.Context, id uint64) (*model.Employee, error)
 }
@@ -48,6 +49,7 @@ func (ei *EmployeeImpl) CreateEmployee(ctx context.Context, employeeDTO request.
 	// 新增用户初始密码为123456
 	// entity.Password = utils.MD5V("123456", "", 0)
 	entity.Password, err = utils.SetPassword("123456")
+	fmt.Println(entity.Password)
 	if err != nil {
 		global.Log.Error(ctx, "utils.SetPassword failed, err: %v", err)
 		return err
@@ -69,8 +71,12 @@ func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.Employe
 		return nil, retcode.NewError(e.ErrorAccountNotFound, e.GetMsg(e.ErrorAccountNotFound))
 	}
 	// 2.校验密码
-	password := utils.MD5V(employeeLogin.Password, "", 0)
-	if password != employee.Password {
+	// password := utils.MD5V(employeeLogin.Password, "", 0)
+	err = utils.CheckPassword(employee.Password, employeeLogin.Password)
+	// if password != employee.Password {
+	// 	return nil, retcode.NewError(e.ErrorPasswordError, e.GetMsg(e.ErrorPasswordError))
+	// }
+	if err != nil {
 		return nil, retcode.NewError(e.ErrorPasswordError, e.GetMsg(e.ErrorPasswordError))
 	}
 	// 3.校验状态
@@ -97,5 +103,54 @@ func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.Employe
 func (ei *EmployeeImpl) Logout(ctx context.Context) error {
 	// TODO 后续扩展为单点登录模式。 1.获取上下文中当前用户
 	// 2.如果是单点登录的话执行推出操作
+	return nil
+}
+
+func (ei *EmployeeImpl) SetStatus(ctx context.Context, id uint64, status int) error {
+	// 设置用户状态,构造实体
+	entity := model.Employee{Id: id, Status: status}
+	err := ei.repo.UpdateStatus(ctx, entity)
+	if err != nil {
+		global.Log.Error(ctx, "EmployeeImpl.SetStatus failed, err: %v", err)
+		return err
+	}
+	return nil
+}
+
+// 修改密码
+func (ei *EmployeeImpl) EditPassword(ctx context.Context, employeeEdit request.EmployeeEditPassword) error {
+	// 1.获取员工信息
+	employee, err := ei.repo.GetById(ctx, employeeEdit.EmpId)
+	if err != nil {
+		global.Log.Error(ctx, "EmployeeImpl.EditPassword failed, err: %v", err)
+		return err
+	}
+	// 校验用户老密码
+	if employee == nil {
+		return retcode.NewError(e.ErrorAccountNotFound, e.GetMsg(e.ErrorAccountNotFound))
+	}
+	// oldHashPassword := utils.MD5V(employeeEdit.OldPassword, "", 0)
+	// if employee.Password != oldHashPassword {
+	// 	return retcode.NewError(e.ErrorPasswordError, e.GetMsg(e.ErrorPasswordError))
+	// }
+	err = utils.CheckPassword(employee.Password, employeeEdit.OldPassword)
+	if err != nil {
+		return retcode.NewError(e.ErrorPasswordError, e.GetMsg(e.ErrorPasswordError))
+	}
+	// 修改员工密码
+	// newHashPassword := utils.MD5V(employeeEdit.NewPassword, "", 0) // 使用新密码生成哈希值
+	newHashPassword, err := utils.SetPassword(employeeEdit.NewPassword)
+	if err != nil {
+		global.Log.Error(ctx, "utils.SetPassword failed, err: %v", err)
+		return err
+	}
+	err = ei.repo.Update(ctx, model.Employee{
+		Id:       employeeEdit.EmpId,
+		Password: newHashPassword,
+	})
+	if err != nil {
+		global.Log.Error(ctx, "EmployeeImpl.EditPassword failed, err: %v", err)
+		return err
+	}
 	return nil
 }
