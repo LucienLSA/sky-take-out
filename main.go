@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"skytakeout/common/trace"
 	"skytakeout/config"
 	"skytakeout/global"
 	"skytakeout/initialize"
@@ -19,7 +18,7 @@ func main() {
 	logger.Init(global.Config.Log.Level, global.Config.Log.FilePath)
 	logger.Logger(context.Background()).Info("logger init success")
 	// tracer 初始化
-	shutdown := trace.InitTracer()
+	shutdown := initialize.InitTracer()
 	defer shutdown(context.Background())
 	logger.Logger(context.Background()).Info("trace init success")
 	// Gorm初始化
