@@ -17,7 +17,7 @@ type CustomPayload struct {
 }
 
 // GenerateToken 生成Token uid 用户id subject 签发对象  secret 加盐
-func GenerateToken(uid uint64, uname string, secret string) (string, error) {
+func GenerateTokenV0(uid uint64, uname string, secret string) (string, error) {
 	claim := CustomPayload{
 		UserId:   uid,
 		UserName: uname,
@@ -89,9 +89,28 @@ func ParseToken(token string, secret string) (myclaims *CustomPayload, err error
 	return nil, errors.New("invalid token")
 }
 
+// GenerateAccessToken 只生成 access_token
+func GenerateAccessToken(uid uint64, uname string, secret string) (accessToken string, err error) {
+	nowTime := time.Now()
+	ttl := global.Config.Jwt.Admin.TTL
+	expireTime := nowTime.Add(time.Duration(ttl) * time.Minute)
+	claim := CustomPayload{
+		UserId:   uid,
+		UserName: uname,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "Auth_Server",                                   //签发者
+			Subject:   uname,                                           //签发对象
+			Audience:  jwt.ClaimStrings{"PC", "Wechat_Program"},        //签发受众
+			ExpiresAt: jwt.NewNumericDate(expireTime),                  //过期时间
+			NotBefore: jwt.NewNumericDate(time.Now().Add(time.Second)), //最早使用时间
+			IssuedAt:  jwt.NewNumericDate(time.Now()),                  //签发时间
+		},
+	}
+	accessToken, err = jwt.NewWithClaims(jwt.SigningMethodHS256, claim).SignedString([]byte(secret))
+	return
+}
+
 // ParseRefreshToken 验证用户token
-// 只要有一个 token 没过期，就会自动刷新并返回新的 token。
-// 如果两个都过期了，用户需要重新登录。
 func ParseRefreshToken(aToken, rToken, secret string) (newAToken, newRToken string, err error) {
 	accessClaim, err := ParseToken(aToken, secret)
 	if err != nil {
@@ -108,17 +127,19 @@ func ParseRefreshToken(aToken, rToken, secret string) (newAToken, newRToken stri
 
 	// access_token 没过期
 	if accessClaim.ExpiresAt.After(time.Now()) {
-		// 剩余时间
-		remaining := accessClaim.ExpiresAt.Sub(time.Now())
+		remaining := time.Until(accessClaim.ExpiresAt.Time)
 		if remaining < refreshThreshold {
-			// 快过期时才刷新
-			return GenerateTokenV1(accessClaim.UserId, accessClaim.UserName, secret)
+			// 只刷新 access_token
+			newAToken, err = GenerateAccessToken(accessClaim.UserId, accessClaim.UserName, secret)
+			if err != nil {
+				return
+			}
+			return newAToken, rToken, nil
 		}
-		// 否则直接返回原 token
 		return aToken, rToken, nil
 	}
 
-	// access_token 过期，但 refresh_token 没过期，可以刷新
+	// access_token 过期，但 refresh_token 没过期，可以刷新一对新的 token
 	if refreshClaim.ExpiresAt.After(time.Now()) {
 		return GenerateTokenV1(accessClaim.UserId, accessClaim.UserName, secret)
 	}

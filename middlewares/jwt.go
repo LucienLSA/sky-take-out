@@ -1,7 +1,6 @@
 package middlewares
 
 import (
-	"fmt"
 	"net/http"
 	"skytakeout/common"
 	"skytakeout/common/e"
@@ -98,14 +97,29 @@ func VerifyJWTAdminV1() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		fmt.Println(newAccessToken == access_token, newRefreshToken == refresh_token)
-		fmt.Println(global.Config.Jwt.Admin.Secret)
 		// 解析获取用户载荷信息
 		claims, err := utils.ParseToken(newAccessToken, global.Config.Jwt.Admin.Secret)
 		if err != nil {
 			code = e.UNKNOW_IDENTITY
 			logger.Logger(ctx2).Error("utils.ParseToken Error", zap.Error(err))
 			c.JSON(http.StatusUnauthorized, common.Result{Code: code})
+			c.Abort()
+			return
+		}
+		// === 新增：写入Redis ===
+		err = cache.StoreUserAToken(c, newAccessToken, claims.UserName)
+		if err != nil {
+			code = e.RedisERR
+			logger.Logger(ctx2).Error("StoreUserAToken Error", zap.Error(err))
+			c.JSON(http.StatusBadGateway, common.Result{Code: code})
+			c.Abort()
+			return
+		}
+		err = cache.StoreUserRToken(c, newRefreshToken, claims.UserName)
+		if err != nil {
+			code = e.RedisERR
+			logger.Logger(ctx2).Error("StoreUserRToken Error", zap.Error(err))
+			c.JSON(http.StatusBadGateway, common.Result{Code: code})
 			c.Abort()
 			return
 		}
