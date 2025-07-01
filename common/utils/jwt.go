@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"skytakeout/global"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -32,8 +33,48 @@ func GenerateToken(uid uint64, uname string, secret string) (string, error) {
 	return token, err
 }
 
+func GenerateTokenV1(uid uint64, uname string, secret string) (accessToken, refreshToken string, err error) {
+	nowTime := time.Now()
+	ttl := global.Config.Jwt.Admin.TTL
+	expireTime := nowTime.Add(time.Duration(ttl) * time.Minute)
+	rtExpireTime := nowTime.Add(time.Duration(ttl) * time.Hour)
+	claim := CustomPayload{
+		UserId:   uid,
+		UserName: uname,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "Auth_Server",                                   //签发者
+			Subject:   uname,                                           //签发对象
+			Audience:  jwt.ClaimStrings{"PC", "Wechat_Program"},        //签发受众
+			ExpiresAt: jwt.NewNumericDate(expireTime),                  //过期时间
+			NotBefore: jwt.NewNumericDate(time.Now().Add(time.Second)), //最早使用时间
+			IssuedAt:  jwt.NewNumericDate(time.Now()),                  //签发时间
+		},
+	}
+	accessToken, err = jwt.NewWithClaims(jwt.SigningMethodHS256, claim).SignedString([]byte(secret))
+	if err != nil {
+		return "", "", err
+	}
+	claim2 := CustomPayload{
+		UserId:   uid,
+		UserName: uname,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "Auth_Server",                                   //签发者
+			Subject:   uname,                                           //签发对象
+			Audience:  jwt.ClaimStrings{"PC", "Wechat_Program"},        //签发受众
+			ExpiresAt: jwt.NewNumericDate(rtExpireTime),                //过期时间
+			NotBefore: jwt.NewNumericDate(time.Now().Add(time.Second)), //最早使用时间
+			IssuedAt:  jwt.NewNumericDate(time.Now()),                  //签发时间
+		},
+	}
+	refreshToken, err = jwt.NewWithClaims(jwt.SigningMethodHS256, claim2).SignedString([]byte(secret))
+	if err != nil {
+		return "", "", err
+	}
+	return accessToken, refreshToken, nil
+}
+
+// 解析token
 func ParseToken(token string, secret string) (*CustomPayload, error) {
-	// 解析token
 	parseToken, err := jwt.ParseWithClaims(token, &CustomPayload{}, func(token *jwt.Token) (i interface{}, err error) {
 		return []byte(secret), nil
 	})
@@ -44,4 +85,32 @@ func ParseToken(token string, secret string) (*CustomPayload, error) {
 		return claims, nil
 	}
 	return nil, errors.New("invalid token")
+}
+
+// ParseRefreshToken 验证用户token
+// 只要有一个 token 没过期，就会自动刷新并返回新的 token。
+// 如果两个都过期了，用户需要重新登录。
+func ParseRefreshToken(aToken, rToken, secret string) (newAToken, newRToken string, err error) {
+	accessClaim, err := ParseToken(aToken, secret)
+	if err != nil {
+		return
+	}
+
+	refreshClaim, err := ParseToken(rToken, secret)
+	if err != nil {
+		return
+	}
+
+	if accessClaim.ExpiresAt.After(time.Now()) {
+		// 如果 access_token 没过期,每一次请求都刷新 refresh_token 和 access_token
+		return GenerateTokenV1(accessClaim.UserId, accessClaim.UserName, secret)
+	}
+
+	if refreshClaim.ExpiresAt.After(time.Now()) {
+		// 如果 access_token 过期了,但是 refresh_token 没过期, 刷新 refresh_token 和 access_token
+		return GenerateTokenV1(accessClaim.UserId, accessClaim.UserName, secret)
+	}
+
+	// 如果两者都过期了,重新登陆
+	return "", "", errors.New("身份过期，重新登陆")
 }

@@ -14,12 +14,23 @@ import (
 	"go.uber.org/zap"
 )
 
-func StoreUserIdToken(ctx context.Context, token, username string) (err error) {
-	// 获取token的存活时间
-	duration := time.Duration(24 * time.Hour)
-	key := GetRedisKey(KeyTokenSetPrefix)
+func StoreUserAToken(ctx context.Context, token, username string) (err error) {
+	accessKey := fmt.Sprintf("jwt:admin:%s:access", username)
+	ttl := global.Config.Jwt.Admin.TTL
+	accessDuration := time.Duration(ttl) * time.Minute
 	// 存入redis
-	if err = global.Rdb.Set(ctx, key+username, token, duration).Err(); err != nil {
+	if err = global.Rdb.Set(ctx, accessKey, token, accessDuration).Err(); err != nil {
+		logger.Logger(ctx).Error("global.Rdb.Set failed", zap.Error(err))
+		return retcode.NewError(e.RedisERR, "rdb.Set failed")
+	}
+	return nil
+}
+func StoreUserRToken(ctx context.Context, token, username string) (err error) {
+	ttl := global.Config.Jwt.Admin.TTL
+	refreshDuration := time.Duration(ttl) * time.Hour
+	refreshKey := fmt.Sprintf("jwt:admin:%s:refresh", username)
+	// 存入redis
+	if err = global.Rdb.Set(ctx, refreshKey, token, refreshDuration).Err(); err != nil {
 		logger.Logger(ctx).Error("global.Rdb.Set failed", zap.Error(err))
 		return retcode.NewError(e.RedisERR, "rdb.Set failed")
 	}

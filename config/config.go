@@ -80,14 +80,22 @@ type Log struct {
 }
 
 type Jwt struct {
-	Admin JwtOption `mapstructure:"admin"`
-	User  JwtOption `mapstructure:"user"`
+	Admin  JwtOption `mapstructure:"admin"`
+	User   JwtOption `mapstructure:"user"`
+	Cookie Cookie    `mapstructure:"cookie"`
+	Https  Https     `mapstructure:"https"`
 }
-
+type Cookie struct {
+	MaxAge int `mapstructure:"max_age"`
+}
+type Https struct {
+	HeaderForwardedProto string `mapstructure:"header_forwarded_proto"`
+}
 type JwtOption struct {
-	Secret string `mapstructure:"secret"`
-	TTL    string `mapstructure:"ttl"`
-	Name   string `mapstructure:"name"`
+	Secret           string `mapstructure:"secret"`
+	TTL              int    `mapstructure:"ttl"`
+	AccessTokenName  string `mapstructure:"access_token_name"`
+	RefreshTokenName string `mapstructure:"refresh_token_name"`
 }
 
 type AliOss struct {

@@ -101,29 +101,34 @@ func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.Employe
 	}
 	// 4. 生成token
 	jwtConfig := global.Config.Jwt.Admin
-	token, err := utils.GenerateToken(employee.Id, employeeLogin.UserName, jwtConfig.Secret)
+	accessToken, refreshToken, err := utils.GenerateTokenV1(employee.Id, employeeLogin.UserName, jwtConfig.Secret)
 	if err != nil {
 		logger.Logger(ctx2).Error("utils.GenerateToken failed", zap.Error(err))
 		return nil, err
 	}
 	// 5. token存入redis
-	err = cache.StoreUserIdToken(ctx2, token, employeeLogin.UserName)
+	err = cache.StoreUserAToken(ctx2, accessToken, employeeLogin.UserName)
 	if err != nil {
-		logger.Logger(ctx2).Error("cache.StoreUserIdToken failed", zap.Error(err))
+		logger.Logger(ctx2).Error("cache.StoreUserAToken failed", zap.Error(err))
+		return nil, err
+	}
+	err = cache.StoreUserRToken(ctx2, refreshToken, employeeLogin.UserName)
+	if err != nil {
+		logger.Logger(ctx2).Error("cache.StoreUserRToken failed", zap.Error(err))
 		return nil, err
 	}
 	// 6.构造返回数据
 	resp := response.EmployeeLogin{
-		Id:       employee.Id,
-		Name:     employee.Name,
-		Token:    token,
-		UserName: employee.Username,
+		Id:           employee.Id,
+		Name:         employee.Name,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		UserName:     employee.Username,
 	}
 	return &resp, nil
 }
 
 func (ei *EmployeeImpl) Logout(ctx context.Context, employeeLogout request.EmployeeLogout) error {
-	// TODO 后续扩展为单点登录模式。
 	tracer := otel.Tracer(global.ServiceName)
 	ctx2, span := tracer.Start(ctx, "Logout")
 	defer span.End()
@@ -133,8 +138,8 @@ func (ei *EmployeeImpl) Logout(ctx context.Context, employeeLogout request.Emplo
 		logger.Logger(ctx2).Error("ctx.(*gin.Context).Get failed")
 		return retcode.NewError(e.ErrorUserNotLogin, "user not login")
 	}
-	// 2.如果是单点登录的话执行退出操作
-	token := ctx2.(*gin.Context).Request.Header.Get(global.Config.Jwt.Admin.Name)
+	// 2.执行退出操作
+	token := ctx2.(*gin.Context).Request.Header.Get(global.Config.Jwt.Admin.AccessTokenName)
 	if token != "" {
 		err := cache.DeleteUserIdToken(ctx2, loginUser.(string))
 		if err != nil {

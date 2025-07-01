@@ -15,6 +15,20 @@ var (
 	once sync.Once
 )
 
+type EmailHook struct{}
+
+func (e *EmailHook) Write(p []byte) (n int, err error) {
+	// 邮件发送逻辑
+	go func(msg string) {
+		// sendMail("日志告警", msg)
+		// fmt.Println("邮件告警内容：", msg)
+	}(string(p))
+	return len(p), nil
+}
+
+// 邮件发送本身不需要“同步磁盘”或“刷新缓冲区”，只要实现接口即可。
+func (e *EmailHook) Sync() error { return nil }
+
 // Init初始化全局 logger
 func Init(isDev, path string) {
 	once.Do(func() {
@@ -48,7 +62,14 @@ func Init(isDev, path string) {
 			zapcore.DebugLevel,
 		)
 
-		tee := zapcore.NewTee(consoleCore, fileCore)
+		// 邮件告警
+		emailCore := zapcore.NewCore(
+			zapcore.NewJSONEncoder(fileEncoderCfg), // 编码方式无所谓
+			zapcore.AddSync(&EmailHook{}),
+			zapcore.FatalLevel, // FatalLevel 级别自动触发邮件告警
+		)
+
+		tee := zapcore.NewTee(consoleCore, fileCore, emailCore)
 		l := zap.New(tee, zap.AddCaller(), zap.AddCallerSkip(1))
 
 		global.ZapLog = otelzap.New(l)
