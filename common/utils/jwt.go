@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"skytakeout/global"
 	"time"
 
@@ -74,15 +75,16 @@ func GenerateTokenV1(uid uint64, uname string, secret string) (accessToken, refr
 }
 
 // 解析token
-func ParseToken(token string, secret string) (*CustomPayload, error) {
-	parseToken, err := jwt.ParseWithClaims(token, &CustomPayload{}, func(token *jwt.Token) (i interface{}, err error) {
+func ParseToken(token string, secret string) (myclaims *CustomPayload, err error) {
+	myclaims = &CustomPayload{}
+	tokenClaims, err := jwt.ParseWithClaims(token, myclaims, func(token *jwt.Token) (i interface{}, err error) {
 		return []byte(secret), nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	if claims, ok := parseToken.Claims.(*CustomPayload); ok && parseToken.Valid { // 校验token
-		return claims, nil
+	fmt.Println(tokenClaims)
+	if tokenClaims != nil {
+		if claims, ok := tokenClaims.Claims.(*CustomPayload); ok && tokenClaims.Valid { // 校验token
+			return claims, nil
+		}
 	}
 	return nil, errors.New("invalid token")
 }
@@ -101,16 +103,26 @@ func ParseRefreshToken(aToken, rToken, secret string) (newAToken, newRToken stri
 		return
 	}
 
+	// 阈值：5分钟
+	const refreshThreshold = 5 * time.Minute
+
+	// access_token 没过期
 	if accessClaim.ExpiresAt.After(time.Now()) {
-		// 如果 access_token 没过期,每一次请求都刷新 refresh_token 和 access_token
-		return GenerateTokenV1(accessClaim.UserId, accessClaim.UserName, secret)
+		// 剩余时间
+		remaining := accessClaim.ExpiresAt.Sub(time.Now())
+		if remaining < refreshThreshold {
+			// 快过期时才刷新
+			return GenerateTokenV1(accessClaim.UserId, accessClaim.UserName, secret)
+		}
+		// 否则直接返回原 token
+		return aToken, rToken, nil
 	}
 
+	// access_token 过期，但 refresh_token 没过期，可以刷新
 	if refreshClaim.ExpiresAt.After(time.Now()) {
-		// 如果 access_token 过期了,但是 refresh_token 没过期, 刷新 refresh_token 和 access_token
 		return GenerateTokenV1(accessClaim.UserId, accessClaim.UserName, secret)
 	}
 
-	// 如果两者都过期了,重新登陆
+	// 两个都过期，强制重新登录
 	return "", "", errors.New("身份过期，重新登陆")
 }

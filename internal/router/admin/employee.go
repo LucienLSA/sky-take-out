@@ -19,7 +19,7 @@ func (er *EmployeeRouter) InitApiRouter(router *gin.RouterGroup) {
 	publicRouter := router.Group("employee")
 	privateRouter := router.Group("employee")
 	// 私有路由使用jwt验证管理员
-	privateRouter.Use(middlewares.VerifyJWTAdmin())
+	privateRouter.Use(middlewares.VerifyJWTAdminV1())
 	// 依赖注入
 	er.service = service.NewEmployeeService(
 		dao.NewEmployeeDao(global.DB),

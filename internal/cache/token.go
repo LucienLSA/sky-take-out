@@ -37,11 +37,10 @@ func StoreUserRToken(ctx context.Context, token, username string) (err error) {
 	return nil
 }
 
-// 从redis取token
-func GetJwtToken(ctx context.Context, username string) (token string, err error) {
-	key := GetRedisKey(KeyTokenSetPrefix)
-	token, err = global.Rdb.Get(ctx, key+username).Result()
-	fmt.Println("token:", token)
+// 从redis取access_token
+func GetUserAToken(ctx context.Context, username string) (token string, err error) {
+	accessKey := fmt.Sprintf("jwt:admin:%s:access", username)
+	token, err = global.Rdb.Get(ctx, accessKey).Result()
 	if err == redis.Nil {
 		logger.Logger(ctx).Error("global.Rdb.Get failed", zap.String("err", "redis.Nil"))
 		return "", retcode.NewError(e.ErrorUserNotLogin, "token is empty")
@@ -53,14 +52,21 @@ func GetJwtToken(ctx context.Context, username string) (token string, err error)
 	return token, nil
 }
 
-// 删除用户token
-func DeleteUserIdToken(ctx context.Context, username string) error {
-	// 由于存储时是以 username 为 key，token 为 value，需要查找对应username的token进行过期
-	// username在数据库定义时是唯一值
-	// 构造Redis中存储的key
-	key := GetRedisKey(KeyTokenSetPrefix) + username
-	// 直接删除该key todo:设置过期时间为0
-	err := global.Rdb.Del(ctx, key).Err()
+// 删除用户access_token
+func DeleteUserAToken(ctx context.Context, username string) error {
+	accessKey := fmt.Sprintf("jwt:admin:%s:access", username)
+	err := global.Rdb.Del(ctx, accessKey).Err()
+	if err != nil {
+		logger.Logger(ctx).Error("global.Rdb.Del failed", zap.Error(err))
+		return retcode.NewError(e.RedisERR, "rdb.Del failed")
+	}
+	return nil
+}
+
+// 删除用户refresh_token
+func DeleteUserRToken(ctx context.Context, username string) error {
+	refreshKey := fmt.Sprintf("jwt:admin:%s:refresh", username)
+	err := global.Rdb.Del(ctx, refreshKey).Err()
 	if err != nil {
 		logger.Logger(ctx).Error("global.Rdb.Del failed", zap.Error(err))
 		return retcode.NewError(e.RedisERR, "rdb.Del failed")

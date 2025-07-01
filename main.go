@@ -11,12 +11,15 @@ import (
 )
 
 func main() {
-	// 配置文件初始化
+	// config初始化
 	global.Config = config.InitLoadConfig()
 	// Log初始化
 	// global.Log = logger.NewLogger(global.Config.Log.Level, global.Config.Log.FilePath)
 	logger.Init(global.Config.Log.Level, global.Config.Log.FilePath)
 	logger.Logger(context.Background()).Info("logger init success")
+	// 常量初始化
+	global.InitConst()
+	logger.Logger(context.Background()).Info("const init success")
 	// tracer 初始化
 	shutdown := initialize.InitTracer()
 	defer shutdown(context.Background())

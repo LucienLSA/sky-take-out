@@ -84,7 +84,10 @@ func (ec *EmployeeController) Logout(ctx *gin.Context) {
 		retcode.Fatal(ctx, err, "")
 		return
 	}
-	err = ec.service.Logout(ctx2, employeeLogout)
+	// 获取上下文中当前用户
+	userName, _ := ctx.Get(enum.CurrentName)
+	accessToken := ctx.GetHeader(global.Config.Jwt.Admin.AccessToken)
+	err = ec.service.Logout(ctx2, userName.(string), accessToken)
 	if err != nil {
 		logger.Logger(ctx2).Error("EmployeeController Logout Error", zap.Error(err))
 		retcode.Fatal(ctx, err, "")

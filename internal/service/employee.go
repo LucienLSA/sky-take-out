@@ -16,14 +16,13 @@ import (
 	"skytakeout/internal/model"
 	"skytakeout/logger"
 
-	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 )
 
 type IEmployeeService interface {
 	Login(context.Context, request.EmployeeLogin) (*response.EmployeeLogin, error)
-	Logout(context.Context, request.EmployeeLogout) error
+	Logout(context.Context, string, string) error
 	EditPassword(context.Context, request.EmployeeEditPassword) error
 	CreateEmployee(ctx context.Context, employee request.EmployeeDTO) error
 	PageQuery(ctx context.Context, dto request.EmployeePageQueryDTO) (*common.PageResult, error)
@@ -128,22 +127,15 @@ func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.Employe
 	return &resp, nil
 }
 
-func (ei *EmployeeImpl) Logout(ctx context.Context, employeeLogout request.EmployeeLogout) error {
+func (ei *EmployeeImpl) Logout(ctx context.Context, userName, accessToken string) error {
 	tracer := otel.Tracer(global.ServiceName)
 	ctx2, span := tracer.Start(ctx, "Logout")
 	defer span.End()
-	// 1.获取上下文中当前用户
-	loginUser, exists := ctx2.(*gin.Context).Get(enum.CurrentName)
-	if !exists {
-		logger.Logger(ctx2).Error("ctx.(*gin.Context).Get failed")
-		return retcode.NewError(e.ErrorUserNotLogin, "user not login")
-	}
-	// 2.执行退出操作
-	token := ctx2.(*gin.Context).Request.Header.Get(global.Config.Jwt.Admin.AccessTokenName)
-	if token != "" {
-		err := cache.DeleteUserIdToken(ctx2, loginUser.(string))
+	// 执行退出操作
+	if accessToken != "" {
+		err := cache.DeleteUserAToken(ctx2, userName)
 		if err != nil {
-			logger.Logger(ctx2).Error("cache.DeleteUserIdToken failed", zap.Error(err))
+			logger.Logger(ctx2).Error("cache.DeleteUserAToken failed", zap.Error(err))
 			return err
 		}
 	}

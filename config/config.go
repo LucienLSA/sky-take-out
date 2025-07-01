@@ -92,10 +92,10 @@ type Https struct {
 	HeaderForwardedProto string `mapstructure:"header_forwarded_proto"`
 }
 type JwtOption struct {
-	Secret           string `mapstructure:"secret"`
-	TTL              int    `mapstructure:"ttl"`
-	AccessTokenName  string `mapstructure:"access_token_name"`
-	RefreshTokenName string `mapstructure:"refresh_token_name"`
+	Secret       string `mapstructure:"secret"`
+	TTL          int    `mapstructure:"ttl"`
+	AccessToken  string `mapstructure:"access_token"`
+	RefreshToken string `mapstructure:"refresh_token"`
 }
 
 type AliOss struct {

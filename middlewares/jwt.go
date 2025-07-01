@@ -1,6 +1,7 @@
 package middlewares
 
 import (
+	"fmt"
 	"net/http"
 	"skytakeout/common"
 	"skytakeout/common/e"
@@ -23,7 +24,7 @@ func VerifyJWTAdmin() gin.HandlerFunc {
 		ctx2, span := tracer.Start(c, "VerifyJWTAdmin")
 		defer span.End()
 		code := e.SUCCESS
-		token := c.Request.Header.Get(global.Config.Jwt.Admin.AccessTokenName)
+		token := c.Request.Header.Get(global.Config.Jwt.Admin.AccessToken)
 		if token == "" {
 			code = e.UNKNOW_IDENTITY
 			logger.Logger(ctx2).Error("c.Request.Header.Get Error")
@@ -40,7 +41,7 @@ func VerifyJWTAdmin() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		rToken, err := cache.GetJwtToken(c, payLoad.UserName)
+		rToken, err := cache.GetUserAToken(c, payLoad.UserName)
 		// redis获取token失败，分别为内部错误和未登录
 		if err == retcode.NewError(e.RedisERR, "rdb.Get failed") {
 			code = e.RedisERR
@@ -76,14 +77,14 @@ func VerifyJWTAdmin() gin.HandlerFunc {
 func VerifyJWTAdminV1() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tracer := otel.Tracer("sky-take-out")
-		ctx2, span := tracer.Start(c, "VerifyJWTAdmin")
+		ctx2, span := tracer.Start(c, "VerifyJWTAdminV1")
 		defer span.End()
 		code := e.SUCCESS
-		access_token := c.Request.Header.Get(global.Config.Jwt.Admin.AccessTokenName)
-		refresh_token := c.Request.Header.Get(global.Config.Jwt.Admin.RefreshTokenName)
+		access_token := c.GetHeader(global.Config.Jwt.Admin.AccessToken)
+		refresh_token := c.GetHeader(global.Config.Jwt.Admin.RefreshToken)
 		if access_token == "" {
 			code = e.UNKNOW_IDENTITY
-			logger.Logger(ctx2).Error("c.Request.Header.Get Error")
+			logger.Logger(ctx2).Error("c.GetHeader Error")
 			c.JSON(http.StatusUnauthorized, common.Result{Code: code})
 			c.Abort()
 			return
@@ -97,6 +98,8 @@ func VerifyJWTAdminV1() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		fmt.Println(newAccessToken == access_token, newRefreshToken == refresh_token)
+		fmt.Println(global.Config.Jwt.Admin.Secret)
 		// 解析获取用户载荷信息
 		claims, err := utils.ParseToken(newAccessToken, global.Config.Jwt.Admin.Secret)
 		if err != nil {
@@ -107,7 +110,7 @@ func VerifyJWTAdminV1() gin.HandlerFunc {
 			return
 		}
 		// redis获取token
-		rToken, err := cache.GetJwtToken(c, claims.UserName)
+		rToken, err := cache.GetUserAToken(c, claims.UserName)
 		// 如果失败，分别为内部错误和未登录
 		if err == retcode.NewError(e.RedisERR, "rdb.Get failed") {
 			code = e.RedisERR
@@ -116,7 +119,7 @@ func VerifyJWTAdminV1() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		if err == retcode.NewError(e.ErrorUserNotLogin, "token is empty") {
+		if err == retcode.NewError(e.ErrorUserNotLogin, "token is invalid") {
 			code = e.ErrorUserNotLogin
 			logger.Logger(ctx2).Error("ErrorUserNotLogin", zap.Error(err))
 			c.JSON(http.StatusUnauthorized, common.Result{Code: code})
@@ -142,10 +145,10 @@ func VerifyJWTAdminV1() gin.HandlerFunc {
 
 func SetToken(c *gin.Context, accessToken, refreshToken string) {
 	secure := IsHttps(c)
-	c.Header(global.Config.Jwt.Admin.AccessTokenName, accessToken)
-	c.Header(global.Config.Jwt.Admin.RefreshTokenName, refreshToken)
-	c.SetCookie(global.Config.Jwt.Admin.AccessTokenName, accessToken, global.Config.Jwt.Cookie.MaxAge, "/", "", secure, true)
-	c.SetCookie(global.Config.Jwt.Admin.RefreshTokenName, refreshToken, global.Config.Jwt.Cookie.MaxAge, "/", "", secure, true)
+	c.Header(global.Config.Jwt.Admin.AccessToken, accessToken)
+	c.Header(global.Config.Jwt.Admin.RefreshToken, refreshToken)
+	c.SetCookie(global.Config.Jwt.Admin.AccessToken, accessToken, global.Config.Jwt.Cookie.MaxAge, "/", "", secure, true)
+	c.SetCookie(global.Config.Jwt.Admin.RefreshToken, refreshToken, global.Config.Jwt.Cookie.MaxAge, "/", "", secure, true)
 }
 
 // 判断是否https
@@ -160,7 +163,7 @@ func IsHttps(c *gin.Context) bool {
 func VerifyJWTUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		code := e.SUCCESS
-		token := c.Request.Header.Get(global.Config.Jwt.User.AccessTokenName)
+		token := c.Request.Header.Get(global.Config.Jwt.User.AccessToken)
 		if token == "" {
 			code = e.UNKNOW_IDENTITY
 			c.JSON(http.StatusUnauthorized, common.Result{Code: code})
