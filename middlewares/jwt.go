@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// 验证JWT管理员
+// 验证JWT管理员 单token
 func VerifyJWTAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tracer := otel.Tracer("sky-take-out")
@@ -41,7 +41,6 @@ func VerifyJWTAdmin() gin.HandlerFunc {
 			return
 		}
 		rToken, err := cache.GetUserAToken(c, payLoad.UserName)
-		// redis获取token失败，分别为内部错误和未登录
 		if err == retcode.NewError(e.RedisERR, "rdb.Get failed") {
 			code = e.RedisERR
 			logger.Logger(ctx2).Error("RedisERR", zap.Error(err))
@@ -56,7 +55,7 @@ func VerifyJWTAdmin() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		// 验证token一致性：比较请求中的token和Redis中存储的token
+		// 只做token一致性校验
 		if token != rToken {
 			code = e.UNKNOW_IDENTITY
 			logger.Logger(ctx2).Error("Token不一致，可能存在重复登录",
@@ -66,32 +65,13 @@ func VerifyJWTAdmin() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		// 在上下文设置载荷信息
 		c.Set(enum.CurrentId, payLoad.UserId)
 		c.Set(enum.CurrentName, payLoad.UserName)
-
-		// 可选：检查是否有会话失效通知（用于单点登录）
-		hasNotification, err := cache.HasSessionInvalidNotification(c, payLoad.UserName)
-		if err != nil {
-			logger.Logger(ctx2).Warn("检查会话失效通知失败", zap.Error(err))
-		} else if hasNotification {
-			// 清除通知
-			cache.ClearSessionInvalidNotification(c, payLoad.UserName)
-			// 返回会话失效状态，让客户端处理
-			c.JSON(http.StatusUnauthorized, common.Result{
-				Code: e.UNKNOW_IDENTITY,
-				Msg:  "会话已在其他设备登录",
-			})
-			c.Abort()
-			return
-		}
-
-		// 这里是否要通知客户端重新保存新的Token
 		c.Next()
 	}
 }
 
-// 验证JWT管理员
+// 验证JWT管理员 双token
 func VerifyJWTAdminV1() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tracer := otel.Tracer("sky-take-out")
@@ -116,7 +96,6 @@ func VerifyJWTAdminV1() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		// 解析获取用户载荷信息
 		claims, err := utils.ParseToken(newAccessToken, global.Config.Jwt.Admin.Secret)
 		if err != nil {
 			code = e.UNKNOW_IDENTITY
@@ -125,7 +104,6 @@ func VerifyJWTAdminV1() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		// === 新增：写入Redis ===
 		err = cache.StoreUserAToken(c, newAccessToken, claims.UserName)
 		if err != nil {
 			code = e.RedisERR
@@ -142,9 +120,7 @@ func VerifyJWTAdminV1() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		// redis获取token进行验证
 		rToken, err := cache.GetUserAToken(c, claims.UserName)
-		// 如果失败，分别为内部错误和未登录
 		if err == retcode.NewError(e.RedisERR, "rdb.Get failed") {
 			code = e.RedisERR
 			logger.Logger(ctx2).Error("RedisERR", zap.Error(err))
@@ -159,7 +135,7 @@ func VerifyJWTAdminV1() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		// 验证token一致性：比较新的access_token和Redis中存储的token
+		// 只做token一致性校验
 		if newAccessToken != rToken {
 			code = e.UNKNOW_IDENTITY
 			logger.Logger(ctx2).Error("Token不一致，可能存在重复登录",
@@ -170,27 +146,8 @@ func VerifyJWTAdminV1() gin.HandlerFunc {
 			return
 		}
 		SetToken(c, newAccessToken, newRefreshToken)
-		// 在上下文设置载荷信息
 		c.Set(enum.CurrentId, claims.UserId)
 		c.Set(enum.CurrentName, claims.UserName)
-
-		// 可选：检查是否有会话失效通知（用于单点登录）
-		hasNotification, err := cache.HasSessionInvalidNotification(c, claims.UserName)
-		if err != nil {
-			logger.Logger(ctx2).Warn("检查会话失效通知失败", zap.Error(err))
-		} else if hasNotification {
-			// 清除通知
-			cache.ClearSessionInvalidNotification(c, claims.UserName)
-			// 返回会话失效状态，让客户端处理
-			c.JSON(http.StatusUnauthorized, common.Result{
-				Code: e.UNKNOW_IDENTITY,
-				Msg:  "会话已在其他设备登录",
-			})
-			c.Abort()
-			return
-		}
-
-		// 这里是否要通知客户端重新保存新的Token
 		c.Next()
 	}
 }

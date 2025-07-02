@@ -1,12 +1,10 @@
 package controller
 
 import (
-	"skytakeout/common/e"
 	"skytakeout/common/enum"
 	"skytakeout/common/retcode"
 	"skytakeout/global"
 	"skytakeout/internal/api/request"
-	"skytakeout/internal/cache"
 	"skytakeout/internal/service"
 	"strconv"
 
@@ -199,48 +197,4 @@ func (ec *EmployeeController) GetById(ctx *gin.Context) {
 		return
 	}
 	retcode.OK(ctx, employee)
-}
-
-// CheckSessionStatus 检查会话状态
-func (ec *EmployeeController) CheckSessionStatus(ctx *gin.Context) {
-	tracer := otel.Tracer(global.ServiceName)
-	ctx2, span := tracer.Start(ctx, "CheckSessionStatus")
-	defer span.End()
-
-	// 获取当前用户
-	userName, exists := ctx.Get(enum.CurrentName)
-	if !exists {
-		logger.Logger(ctx2).Error("用户信息不存在")
-		retcode.Fatal(ctx, retcode.NewError(e.ErrorUserNotLogin, "用户未登录"), "")
-		return
-	}
-
-	// 检查是否有会话失效通知
-	hasNotification, err := cache.HasSessionInvalidNotification(ctx2, userName.(string))
-	if err != nil {
-		logger.Logger(ctx2).Error("检查会话失效通知失败", zap.Error(err))
-		retcode.Fatal(ctx, err, "")
-		return
-	}
-
-	if hasNotification {
-		// 清除通知
-		err = cache.ClearSessionInvalidNotification(ctx2, userName.(string))
-		if err != nil {
-			logger.Logger(ctx2).Warn("清除会话失效通知失败", zap.Error(err))
-		}
-
-		// 返回会话失效状态
-		retcode.OK(ctx, gin.H{
-			"sessionValid": false,
-			"message":      "会话已在其他设备登录",
-		})
-		return
-	}
-
-	// 返回会话有效状态
-	retcode.OK(ctx, gin.H{
-		"sessionValid": true,
-		"message":      "会话有效",
-	})
 }

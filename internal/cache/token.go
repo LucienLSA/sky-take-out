@@ -37,21 +37,6 @@ func StoreUserRToken(ctx context.Context, token, username string) (err error) {
 	return nil
 }
 
-// 从redis取access_token
-func GetUserAToken(ctx context.Context, username string) (token string, err error) {
-	accessKey := fmt.Sprintf("jwt:admin:%s:access", username)
-	token, err = global.Rdb.Get(ctx, accessKey).Result()
-	if err == redis.Nil {
-		logger.Logger(ctx).Error("global.Rdb.Get failed", zap.String("err", "redis.Nil"))
-		return "", retcode.NewError(e.ErrorUserNotLogin, "token is empty")
-	}
-	if err != nil {
-		logger.Logger(ctx).Error("global.Rdb.Get failed", zap.Error(err))
-		return "", retcode.NewError(e.RedisERR, "rdb.Get failed")
-	}
-	return token, nil
-}
-
 // 删除用户access_token
 func DeleteUserAToken(ctx context.Context, username string) error {
 	accessKey := fmt.Sprintf("jwt:admin:%s:access", username)
@@ -74,21 +59,19 @@ func DeleteUserRToken(ctx context.Context, username string) error {
 	return nil
 }
 
-// 检查用户是否有活跃会话
-func HasActiveSession(ctx context.Context, username string) (bool, error) {
+// 从redis取access_token
+func GetUserAToken(ctx context.Context, username string) (token string, err error) {
 	accessKey := fmt.Sprintf("jwt:admin:%s:access", username)
-
-	// 检查access_token是否存在
-	_, err := global.Rdb.Get(ctx, accessKey).Result()
+	token, err = global.Rdb.Get(ctx, accessKey).Result()
 	if err == redis.Nil {
-		return false, nil // 没有活跃会话
+		logger.Logger(ctx).Error("global.Rdb.Get failed", zap.String("err", "redis.Nil"))
+		return "", retcode.NewError(e.ErrorUserNotLogin, "token is empty")
 	}
 	if err != nil {
 		logger.Logger(ctx).Error("global.Rdb.Get failed", zap.Error(err))
-		return false, retcode.NewError(e.RedisERR, "rdb.Get failed")
+		return "", retcode.NewError(e.RedisERR, "rdb.Get failed")
 	}
-
-	return true, nil // 有活跃会话
+	return token, nil
 }
 
 // 强制清除用户所有会话（用于单点登录）
