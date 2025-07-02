@@ -77,12 +77,14 @@ func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.Employe
 	tracer := otel.Tracer(global.ServiceName)
 	ctx2, span := tracer.Start(ctx, "Login")
 	defer span.End()
+
 	// 1.查询用户是否存在
 	employee, err := ei.repo.GetByUserName(ctx2, employeeLogin.UserName)
 	if err != nil || employee == nil {
 		logger.Logger(ctx2).Error("repo.GetByUserName failed", zap.Error(err))
 		return nil, retcode.NewError(e.ErrorAccountNotFound, e.GetMsg(e.ErrorAccountNotFound))
 	}
+
 	// 2.校验密码
 	// password := utils.MD5V(employeeLogin.Password, "", 0)
 	err = utils.CheckPassword(employee.Password, employeeLogin.Password)
@@ -93,19 +95,45 @@ func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.Employe
 		logger.Logger(ctx2).Error("utils.CheckPassword failed", zap.Error(err))
 		return nil, retcode.NewError(e.ErrorPasswordError, e.GetMsg(e.ErrorPasswordError))
 	}
+
 	// 3.校验状态
 	if employee.Status == enum.DISABLE {
 		logger.Logger(ctx2).Error("Status.DISABLE failed", zap.Error(err))
 		return nil, retcode.NewError(e.ErrorAccountLOCKED, e.GetMsg(e.ErrorAccountLOCKED))
 	}
-	// 4. 生成token
+
+	// 4. 单点登录：检查并清除旧会话
+	hasActiveSession, err := cache.HasActiveSession(ctx2, employeeLogin.UserName)
+	if err != nil {
+		logger.Logger(ctx2).Error("cache.HasActiveSession failed", zap.Error(err))
+		return nil, err
+	}
+
+	if hasActiveSession {
+		logger.Logger(ctx2).Info("检测到用户已有活跃会话，执行单点登录", zap.String("username", employeeLogin.UserName))
+		// 强制清除旧会话
+		err = cache.ForceLogoutUser(ctx2, employeeLogin.UserName)
+		if err != nil {
+			logger.Logger(ctx2).Error("cache.ForceLogoutUser failed", zap.Error(err))
+			return nil, err
+		}
+		// 发送会话失效通知给旧设备
+		err = cache.SetSessionInvalidNotification(ctx2, employeeLogin.UserName)
+		if err != nil {
+			logger.Logger(ctx2).Warn("设置会话失效通知失败", zap.Error(err))
+			// 不阻塞登录流程，只记录警告
+		}
+	}
+
+	// 5. 生成新token
 	jwtConfig := global.Config.Jwt.Admin
 	accessToken, refreshToken, err := utils.GenerateTokenV1(employee.Id, employeeLogin.UserName, jwtConfig.Secret)
 	if err != nil {
 		logger.Logger(ctx2).Error("utils.GenerateToken failed", zap.Error(err))
 		return nil, err
 	}
-	// 5. token存入redis
+
+	// 6. 存储新token到redis
 	err = cache.StoreUserAToken(ctx2, accessToken, employeeLogin.UserName)
 	if err != nil {
 		logger.Logger(ctx2).Error("cache.StoreUserAToken failed", zap.Error(err))
@@ -116,7 +144,8 @@ func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.Employe
 		logger.Logger(ctx2).Error("cache.StoreUserRToken failed", zap.Error(err))
 		return nil, err
 	}
-	// 6.构造返回数据
+
+	// 7. 构造返回数据
 	resp := response.EmployeeLogin{
 		Id:           employee.Id,
 		Name:         employee.Name,
@@ -124,6 +153,11 @@ func (ei *EmployeeImpl) Login(ctx context.Context, employeeLogin request.Employe
 		RefreshToken: refreshToken,
 		UserName:     employee.Username,
 	}
+
+	logger.Logger(ctx2).Info("用户登录成功",
+		zap.String("username", employeeLogin.UserName),
+		zap.Bool("wasActiveSession", hasActiveSession))
+
 	return &resp, nil
 }
 
@@ -131,7 +165,8 @@ func (ei *EmployeeImpl) Logout(ctx context.Context, userName, accessToken string
 	tracer := otel.Tracer(global.ServiceName)
 	ctx2, span := tracer.Start(ctx, "Logout")
 	defer span.End()
-	// 执行退出操作
+
+	// 删除access_token
 	if accessToken != "" {
 		err := cache.DeleteUserAToken(ctx2, userName)
 		if err != nil {
@@ -139,7 +174,15 @@ func (ei *EmployeeImpl) Logout(ctx context.Context, userName, accessToken string
 			return err
 		}
 	}
-	logger.Logger(ctx2).Info("token已经清除,登录状态失效")
+
+	// 删除refresh_token
+	err := cache.DeleteUserRToken(ctx2, userName)
+	if err != nil {
+		logger.Logger(ctx2).Error("cache.DeleteUserRToken failed", zap.Error(err))
+		return err
+	}
+
+	logger.Logger(ctx2).Info("access_token和refresh_token已清除,登录状态失效")
 	return nil
 }
 

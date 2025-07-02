@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"skytakeout/common/e"
 	"skytakeout/common/enum"
 	"skytakeout/common/retcode"
 	"skytakeout/global"
 	"skytakeout/internal/api/request"
+	"skytakeout/internal/cache"
 	"skytakeout/internal/service"
 	"strconv"
 
@@ -31,7 +33,7 @@ func NewEmployeeController(employeeService service.IEmployeeService) *EmployeeCo
 // AddEmployee 新增员工
 func (ec *EmployeeController) AddEmployee(ctx *gin.Context) {
 	tracer := otel.Tracer(global.ServiceName)
-	ctx2, span := tracer.Start(ctx, "AddEmployee")
+	ctx2, span := tracer.Start(ctx, "EmployeeController AddEmployee")
 	defer span.End()
 	var request request.EmployeeDTO
 	var err error
@@ -54,7 +56,7 @@ func (ec *EmployeeController) AddEmployee(ctx *gin.Context) {
 // Login 员工登录
 func (ec *EmployeeController) Login(ctx *gin.Context) {
 	tracer := otel.Tracer(global.ServiceName)
-	ctx2, span := tracer.Start(ctx, "Login")
+	ctx2, span := tracer.Start(ctx, "EmployeeController Login")
 	defer span.End()
 	employeeLogin := request.EmployeeLogin{}
 	err := ctx.Bind(&employeeLogin)
@@ -75,7 +77,7 @@ func (ec *EmployeeController) Login(ctx *gin.Context) {
 // Logout 员工退出
 func (ec *EmployeeController) Logout(ctx *gin.Context) {
 	tracer := otel.Tracer(global.ServiceName)
-	ctx2, span := tracer.Start(ctx, "Logout")
+	ctx2, span := tracer.Start(ctx, "EmployeeController Logout")
 	defer span.End()
 	employeeLogout := request.EmployeeLogout{}
 	err := ctx.Bind(&employeeLogout)
@@ -99,7 +101,7 @@ func (ec *EmployeeController) Logout(ctx *gin.Context) {
 // OnOrOff 启用Or禁用员工状态
 func (ec *EmployeeController) OnOrOff(ctx *gin.Context) {
 	tracer := otel.Tracer(global.ServiceName)
-	ctx2, span := tracer.Start(ctx, "OnOrOff")
+	ctx2, span := tracer.Start(ctx, "EmployeeController OnOrOff")
 	defer span.End()
 	id, _ := strconv.ParseUint(ctx.Query("id"), 10, 64)
 	status, _ := strconv.Atoi(ctx.Param("status"))
@@ -118,7 +120,7 @@ func (ec *EmployeeController) OnOrOff(ctx *gin.Context) {
 // EditPassword 修改密码
 func (ec *EmployeeController) EditPassword(ctx *gin.Context) {
 	tracer := otel.Tracer(global.ServiceName)
-	ctx2, span := tracer.Start(ctx, "EditPassword")
+	ctx2, span := tracer.Start(ctx, "EmployeeController EditPassword")
 	defer span.End()
 	var reqs request.EmployeeEditPassword
 	var err error
@@ -143,7 +145,7 @@ func (ec *EmployeeController) EditPassword(ctx *gin.Context) {
 // UpdateEmployee 编辑员工信息
 func (ec *EmployeeController) UpdateEmployee(ctx *gin.Context) {
 	tracer := otel.Tracer(global.ServiceName)
-	ctx2, span := tracer.Start(ctx, "UpdateEmployee")
+	ctx2, span := tracer.Start(ctx, "EmployeeController UpdateEmployee")
 	defer span.End()
 	var employeeDTO request.EmployeeDTO
 	err := ctx.Bind(&employeeDTO)
@@ -165,7 +167,7 @@ func (ec *EmployeeController) UpdateEmployee(ctx *gin.Context) {
 // PageQuery 员工分页查询
 func (ec *EmployeeController) PageQuery(ctx *gin.Context) {
 	tracer := otel.Tracer(global.ServiceName)
-	ctx2, span := tracer.Start(ctx, "PageQuery")
+	ctx2, span := tracer.Start(ctx, "EmployeeController PageQuery")
 	defer span.End()
 	var employeePageQueryDTO request.EmployeePageQueryDTO
 	err := ctx.Bind(&employeePageQueryDTO)
@@ -187,7 +189,7 @@ func (ec *EmployeeController) PageQuery(ctx *gin.Context) {
 // GetById 获取员工信息根据id
 func (ec *EmployeeController) GetById(ctx *gin.Context) {
 	tracer := otel.Tracer(global.ServiceName)
-	ctx2, span := tracer.Start(ctx, "GetById")
+	ctx2, span := tracer.Start(ctx, "EmployeeController GetById")
 	defer span.End()
 	id, _ := strconv.ParseUint(ctx.Param("id"), 10, 64)
 	employee, err := ec.service.GetById(ctx2, id)
@@ -197,4 +199,48 @@ func (ec *EmployeeController) GetById(ctx *gin.Context) {
 		return
 	}
 	retcode.OK(ctx, employee)
+}
+
+// CheckSessionStatus 检查会话状态
+func (ec *EmployeeController) CheckSessionStatus(ctx *gin.Context) {
+	tracer := otel.Tracer(global.ServiceName)
+	ctx2, span := tracer.Start(ctx, "CheckSessionStatus")
+	defer span.End()
+
+	// 获取当前用户
+	userName, exists := ctx.Get(enum.CurrentName)
+	if !exists {
+		logger.Logger(ctx2).Error("用户信息不存在")
+		retcode.Fatal(ctx, retcode.NewError(e.ErrorUserNotLogin, "用户未登录"), "")
+		return
+	}
+
+	// 检查是否有会话失效通知
+	hasNotification, err := cache.HasSessionInvalidNotification(ctx2, userName.(string))
+	if err != nil {
+		logger.Logger(ctx2).Error("检查会话失效通知失败", zap.Error(err))
+		retcode.Fatal(ctx, err, "")
+		return
+	}
+
+	if hasNotification {
+		// 清除通知
+		err = cache.ClearSessionInvalidNotification(ctx2, userName.(string))
+		if err != nil {
+			logger.Logger(ctx2).Warn("清除会话失效通知失败", zap.Error(err))
+		}
+
+		// 返回会话失效状态
+		retcode.OK(ctx, gin.H{
+			"sessionValid": false,
+			"message":      "会话已在其他设备登录",
+		})
+		return
+	}
+
+	// 返回会话有效状态
+	retcode.OK(ctx, gin.H{
+		"sessionValid": true,
+		"message":      "会话有效",
+	})
 }

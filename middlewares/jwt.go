@@ -56,10 +56,12 @@ func VerifyJWTAdmin() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		// 如果无错误，而是token不一致，则说明在另一端登录
+		// 验证token一致性：比较请求中的token和Redis中存储的token
 		if token != rToken {
 			code = e.UNKNOW_IDENTITY
-			logger.Logger(ctx2).Error("Repeated login", zap.Error(err))
+			logger.Logger(ctx2).Error("Token不一致，可能存在重复登录",
+				zap.String("requestToken", token[:10]+"..."),
+				zap.String("redisToken", rToken[:10]+"..."))
 			c.JSON(http.StatusUnauthorized, common.Result{Code: code})
 			c.Abort()
 			return
@@ -67,6 +69,23 @@ func VerifyJWTAdmin() gin.HandlerFunc {
 		// 在上下文设置载荷信息
 		c.Set(enum.CurrentId, payLoad.UserId)
 		c.Set(enum.CurrentName, payLoad.UserName)
+
+		// 可选：检查是否有会话失效通知（用于单点登录）
+		hasNotification, err := cache.HasSessionInvalidNotification(c, payLoad.UserName)
+		if err != nil {
+			logger.Logger(ctx2).Warn("检查会话失效通知失败", zap.Error(err))
+		} else if hasNotification {
+			// 清除通知
+			cache.ClearSessionInvalidNotification(c, payLoad.UserName)
+			// 返回会话失效状态，让客户端处理
+			c.JSON(http.StatusUnauthorized, common.Result{
+				Code: e.UNKNOW_IDENTITY,
+				Msg:  "会话已在其他设备登录",
+			})
+			c.Abort()
+			return
+		}
+
 		// 这里是否要通知客户端重新保存新的Token
 		c.Next()
 	}
@@ -123,7 +142,7 @@ func VerifyJWTAdminV1() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		// redis获取token
+		// redis获取token进行验证
 		rToken, err := cache.GetUserAToken(c, claims.UserName)
 		// 如果失败，分别为内部错误和未登录
 		if err == retcode.NewError(e.RedisERR, "rdb.Get failed") {
@@ -140,10 +159,12 @@ func VerifyJWTAdminV1() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		// 如果无错误，而是token不一致，则说明在另一端登录
-		if access_token != rToken {
+		// 验证token一致性：比较新的access_token和Redis中存储的token
+		if newAccessToken != rToken {
 			code = e.UNKNOW_IDENTITY
-			logger.Logger(ctx2).Error("Repeated login", zap.Error(err))
+			logger.Logger(ctx2).Error("Token不一致，可能存在重复登录",
+				zap.String("newToken", newAccessToken[:10]+"..."),
+				zap.String("redisToken", rToken[:10]+"..."))
 			c.JSON(http.StatusUnauthorized, common.Result{Code: code})
 			c.Abort()
 			return
@@ -152,6 +173,23 @@ func VerifyJWTAdminV1() gin.HandlerFunc {
 		// 在上下文设置载荷信息
 		c.Set(enum.CurrentId, claims.UserId)
 		c.Set(enum.CurrentName, claims.UserName)
+
+		// 可选：检查是否有会话失效通知（用于单点登录）
+		hasNotification, err := cache.HasSessionInvalidNotification(c, claims.UserName)
+		if err != nil {
+			logger.Logger(ctx2).Warn("检查会话失效通知失败", zap.Error(err))
+		} else if hasNotification {
+			// 清除通知
+			cache.ClearSessionInvalidNotification(c, claims.UserName)
+			// 返回会话失效状态，让客户端处理
+			c.JSON(http.StatusUnauthorized, common.Result{
+				Code: e.UNKNOW_IDENTITY,
+				Msg:  "会话已在其他设备登录",
+			})
+			c.Abort()
+			return
+		}
+
 		// 这里是否要通知客户端重新保存新的Token
 		c.Next()
 	}

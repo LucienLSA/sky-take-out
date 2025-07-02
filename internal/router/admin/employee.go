@@ -29,6 +29,7 @@ func (er *EmployeeRouter) InitApiRouter(router *gin.RouterGroup) {
 		publicRouter.POST("/login", employeeCtl.Login)
 		// 以下都需要jwt登录验证
 		privateRouter.POST("/logout", employeeCtl.Logout)
+		privateRouter.GET("/session/status", employeeCtl.CheckSessionStatus)
 		privateRouter.POST("", employeeCtl.AddEmployee)
 		privateRouter.POST("/status/:status", employeeCtl.OnOrOff)
 		privateRouter.PUT("/editPassword", employeeCtl.EditPassword)

@@ -73,3 +73,40 @@ func DeleteUserRToken(ctx context.Context, username string) error {
 	}
 	return nil
 }
+
+// 检查用户是否有活跃会话
+func HasActiveSession(ctx context.Context, username string) (bool, error) {
+	accessKey := fmt.Sprintf("jwt:admin:%s:access", username)
+
+	// 检查access_token是否存在
+	_, err := global.Rdb.Get(ctx, accessKey).Result()
+	if err == redis.Nil {
+		return false, nil // 没有活跃会话
+	}
+	if err != nil {
+		logger.Logger(ctx).Error("global.Rdb.Get failed", zap.Error(err))
+		return false, retcode.NewError(e.RedisERR, "rdb.Get failed")
+	}
+
+	return true, nil // 有活跃会话
+}
+
+// 强制清除用户所有会话（用于单点登录）
+func ForceLogoutUser(ctx context.Context, username string) error {
+	// 删除access_token
+	err := DeleteUserAToken(ctx, username)
+	if err != nil {
+		logger.Logger(ctx).Error("DeleteUserAToken failed", zap.Error(err))
+		return err
+	}
+
+	// 删除refresh_token
+	err = DeleteUserRToken(ctx, username)
+	if err != nil {
+		logger.Logger(ctx).Error("DeleteUserRToken failed", zap.Error(err))
+		return err
+	}
+
+	logger.Logger(ctx).Info("用户会话已强制清除", zap.String("username", username))
+	return nil
+}
