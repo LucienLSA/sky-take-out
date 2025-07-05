@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"skytakeout/common/utils"
 	"skytakeout/config"
 	"skytakeout/global"
 	"skytakeout/initialize"
@@ -33,6 +34,11 @@ func main() {
 	// routerRedis初始化
 	router := initialize.InitRouter()
 	logger.Logger(context.Background()).Info("route init success")
+	// 初始化雪花算法
+	if err := utils.InitSnowflake(global.Config.Server.SnowflakeEpoch, global.Config.Server.MachineId); err != nil {
+		logger.Logger(context.Background()).Error("InitSnowflakefailed")
+	}
+	logger.Logger(context.Background()).Info("snowflake init success")
 	// 设置运行环境
 	gin.SetMode(global.Config.Server.Level)
 

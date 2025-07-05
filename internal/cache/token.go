@@ -64,8 +64,8 @@ func GetUserAToken(ctx context.Context, username string) (token string, err erro
 	accessKey := fmt.Sprintf("jwt:admin:%s:access", username)
 	token, err = global.Rdb.Get(ctx, accessKey).Result()
 	if err == redis.Nil {
-		logger.Logger(ctx).Error("global.Rdb.Get failed", zap.String("err", "redis.Nil"))
-		return "", retcode.NewError(e.ErrorUserNotLogin, "token is empty")
+		logger.Logger(ctx).Info("global.Rdb.Get empty", zap.String("info", "redis.Nil"))
+		return "", nil
 	}
 	if err != nil {
 		logger.Logger(ctx).Error("global.Rdb.Get failed", zap.Error(err))

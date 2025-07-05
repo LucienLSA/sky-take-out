@@ -1,10 +1,11 @@
 package initialize
 
 import (
+	"context"
 	"errors"
+	"skytakeout/internal/model"
+	otelZap "skytakeout/logger"
 	"time"
-
-	zaplogger "skytakeout/logger"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -41,7 +42,17 @@ func InitDatabase(dsn string) *gorm.DB {
 	if err != nil {
 		panic(err)
 	}
-
+	err = db.AutoMigrate(&model.Employee{}, &model.AddressBook{},
+		&model.Employee{},
+		&model.Category{},
+		&model.Dish{},
+		&model.DishFlavor{},
+		&model.SetMeal{},
+		&model.SetMealDish{},
+		&model.AddressBook{})
+	if err != nil {
+		otelZap.Logger(context.Background()).Error("db.AutoMigrate", zap.Error(err))
+	}
 	sqlDB, _ := db.DB()
 	sqlDB.SetMaxIdleConns(20)  //设置连接池，空闲
 	sqlDB.SetMaxOpenConns(100) //打开
@@ -70,12 +81,9 @@ func SlowQueryLog(db *gorm.DB) {
 			duration := now.Sub(start.(time.Time))
 			// 一般认为 200 Ms 为Sql慢查询
 			if duration > time.Millisecond*200 {
-				// global.Log.Error(db.Statement.Context, "慢查询", "SQL:", d.Statement.SQL.String())
 				// global.Log.ErrContext(d.Statement.Context, "慢查询", "SQL:", d.Statement.SQL.String())
-				zaplogger.Logger(db.Statement.Context).Error("慢查询",
-					zap.String("sql", d.Statement.SQL.String()),
-					zap.Int64("duration_ms", duration.Milliseconds()),
-				)
+				otelZap.Logger(d.Statement.Context).Error("慢查询", zap.String("SQL", d.Statement.SQL.String()))
+
 			}
 		}
 	})

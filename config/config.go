@@ -50,8 +50,10 @@ type AllConfig struct {
 }
 
 type Server struct {
-	Port  string `mapstructure:"port"`
-	Level string `mapstructure:"level"`
+	Port           string `mapstructure:"port"`
+	Level          string `mapstructure:"level"`
+	SnowflakeEpoch string `mapstructure:"snowflake_epoch"`
+	MachineId      int64  `mapstructure:"machine_id"`
 }
 
 type DataSource struct {

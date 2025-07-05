@@ -46,7 +46,8 @@ func (ei *EmployeeImpl) CreateEmployee(ctx context.Context, employeeDTO request.
 	var err error
 	// 1.新增员工,构建员工基础信息
 	entity := model.Employee{
-		Id:       employeeDTO.Id,
+		// Id:       employeeDTO.Id,
+		Id:       uint64(utils.GenSnowID()),
 		IdNumber: employeeDTO.IdNumber,
 		Name:     employeeDTO.Name,
 		Phone:    employeeDTO.Phone,
